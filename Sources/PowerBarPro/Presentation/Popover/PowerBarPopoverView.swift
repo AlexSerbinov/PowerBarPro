@@ -954,7 +954,7 @@ struct ProcessRowView: View {
         .padding(.horizontal, Spacing.md)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
         .help(tooltip.isEmpty ? process.name : tooltip)
-        .onHover { hovering in
+        .reliableHover { hovering in
             if isHovered != hovering { isHovered = hovering }
         }
         .onAppear {
@@ -1337,7 +1337,7 @@ struct AgentSessionRowView: View {
         .padding(.horizontal, Spacing.md)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
         .help("PID \(session.pid) · up \(session.uptime)\n\(session.cwd)")
-        .onHover { hovering in
+        .reliableHover { hovering in
             if isHovered != hovering { isHovered = hovering }
         }
     }
