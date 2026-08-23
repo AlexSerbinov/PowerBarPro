@@ -287,3 +287,79 @@ final class MacFansClientTests: XCTestCase {
         XCTAssertEqual(json["pct"] as? Int, 70)
     }
 }
+
+// MARK: - KeepAwakeService
+
+final class KeepAwakeServiceTests: XCTestCase {
+
+    private var created: [String] = []
+    private var released: [IOPMAssertionID] = []
+    private var nextID: IOPMAssertionID = 100
+
+    private func makeService(failCreate: Bool = false) -> KeepAwakeService {
+        KeepAwakeService(backend: .init(
+            create: { reason in
+                if failCreate { return nil }
+                self.created.append(reason)
+                self.nextID += 1
+                return self.nextID
+            },
+            release: { id in self.released.append(id) }
+        ))
+    }
+
+    func testStartCreatesAssertion() {
+        let service = makeService()
+        service.start(duration: nil)
+        XCTAssertTrue(service.isActive)
+        XCTAssertNil(service.endsAt)
+        XCTAssertEqual(created.count, 1)
+    }
+
+    func testStartWithDurationSetsEndsAt() {
+        let service = makeService()
+        service.start(duration: 300)
+        XCTAssertTrue(service.isActive)
+        let expected = Date().addingTimeInterval(300)
+        XCTAssertEqual(service.endsAt?.timeIntervalSince1970 ?? 0,
+                       expected.timeIntervalSince1970, accuracy: 2)
+    }
+
+    func testStopReleasesAssertion() {
+        let service = makeService()
+        service.start(duration: nil)
+        service.stop()
+        XCTAssertFalse(service.isActive)
+        XCTAssertNil(service.endsAt)
+        XCTAssertEqual(released.count, 1)
+    }
+
+    func testRestartReleasesPreviousAssertion() {
+        let service = makeService()
+        service.start(duration: nil)
+        service.start(duration: 300)
+        XCTAssertEqual(created.count, 2)
+        XCTAssertEqual(released.count, 1)
+        XCTAssertTrue(service.isActive)
+    }
+
+    func testFailedCreateStaysInactive() {
+        let service = makeService(failCreate: true)
+        service.start(duration: 300)
+        XCTAssertFalse(service.isActive)
+        XCTAssertNil(service.endsAt)
+    }
+
+    func testDurationExpiryStops() {
+        let service = makeService()
+        service.start(duration: 0.2)
+        XCTAssertTrue(service.isActive)
+
+        let exp = expectation(description: "expired")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exp.fulfill() }
+        wait(for: [exp], timeout: 2)
+
+        XCTAssertFalse(service.isActive)
+        XCTAssertEqual(released.count, 1)
+    }
+}

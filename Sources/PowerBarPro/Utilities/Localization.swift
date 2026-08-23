@@ -137,6 +137,18 @@ enum L {
     static var sensors: String { lang == .ukrainian ? "СЕНСОРИ" : "SENSORS" }
     static var agentSessions: String { lang == .ukrainian ? "СЕСІЇ АГЕНТІВ" : "AGENT SESSIONS" }
     static var fanControl: String { lang == .ukrainian ? "ВЕНТИЛЯТОРИ" : "FAN CONTROL" }
+    static var keepAwakeIndefinitely: String { lang == .ukrainian ? "Поки не вимкну" : "Indefinitely" }
+    static var keepAwakeOff: String { lang == .ukrainian ? "Вимкнути" : "Turn Off" }
+    static var keepAwakeHelp: String {
+        lang == .ukrainian
+            ? "Не давати Mac заснути. Обери тривалість — використовується системний power assertion, як в Amphetamine."
+            : "Keep the Mac awake. Pick a duration — uses a system power assertion, same as Amphetamine."
+    }
+    static var keepAwakeActiveHelp: String {
+        lang == .ukrainian
+            ? "Mac не засне. Клік — вимкнути або змінити тривалість."
+            : "The Mac won't sleep. Click to turn off or change the duration."
+    }
     static var fixedSpeed: String { lang == .ukrainian ? "ФІКСОВАНА ШВИДКІСТЬ" : "FIXED SPEED" }
     static var fanAutoHelp: String {
         lang == .ukrainian

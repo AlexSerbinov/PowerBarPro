@@ -58,6 +58,20 @@ final class MenuBarManager: NSObject {
     /// the popover and writes its window frame (top-left origin, points) to
     /// /tmp/powerbarpro_popover_frame.txt — used for docs screenshots.
     private func listenForRemoteOpen() {
+        // Scripting hook: toggle keep-awake (indefinite) from the outside —
+        // `notifyutil`-style senders, Karabiner, shell scripts.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.powerbarpro.keepAwake.toggle"),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let keepAwake = self?.popoverManager?.keepAwake else { return }
+            if keepAwake.isActive {
+                keepAwake.stop()
+            } else {
+                keepAwake.start(duration: nil)
+            }
+        }
+
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.powerbarpro.showPopover"),
             object: nil, queue: .main

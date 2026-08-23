@@ -20,6 +20,7 @@ struct PowerBarPopoverView: View {
     @ObservedObject var processVM: ProcessListViewModel
     var agentSessionsVM: AgentSessionsViewModel?
     var fanControlVM: FanControlViewModel?
+    var keepAwake: KeepAwakeService?
     var settingsModel: PopoverSettingsModel?
     var onQuit: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
@@ -59,8 +60,8 @@ struct PowerBarPopoverView: View {
 
     var mainPage: some View {
         VStack(spacing: 0) {
-            // 1. Glanceable header: total watts + battery chip
-            HeaderRowView(metrics: powerVM.currentMetrics, batteryVM: batteryVM)
+            // 1. Glanceable header: total watts + keep-awake pill + battery
+            HeaderRowView(metrics: powerVM.currentMetrics, batteryVM: batteryVM, keepAwake: keepAwake)
                 .padding(.bottom, Spacing.sm)
 
             // 2. Component strip: CPU / GPU / PKG / RAM / DSP in one row
@@ -106,9 +107,10 @@ struct PowerBarPopoverView: View {
 struct HeaderRowView: View {
     let metrics: SystemMetrics?
     @ObservedObject var batteryVM: BatteryViewModel
+    var keepAwake: KeepAwakeService?
 
     var body: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: Spacing.sm) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(heroValue)
@@ -127,6 +129,10 @@ struct HeaderRowView: View {
 
             Spacer()
 
+            if let keepAwake {
+                KeepAwakePillView(service: keepAwake)
+            }
+
             if batteryVM.isVisible {
                 BatteryChipView(batteryVM: batteryVM)
             }
@@ -136,6 +142,71 @@ struct HeaderRowView: View {
     private var heroValue: String {
         guard let m = metrics else { return "--.-" }
         return String(format: "%.1f", m.sysPower)
+    }
+}
+
+// MARK: - Keep Awake pill (Amphetamine-style)
+
+/// A pill next to the battery chip: click to keep the Mac awake for a
+/// chosen duration (or until turned off). Uses an IOKit power assertion —
+/// no input simulation.
+struct KeepAwakePillView: View {
+    @ObservedObject var service: KeepAwakeService
+
+    /// (label, seconds); nil seconds = until turned off.
+    private static let durations: [(String, TimeInterval?)] = [
+        (L.keepAwakeIndefinitely, nil),
+        ("5 min", 300),
+        ("15 min", 900),
+        ("30 min", 1800),
+        ("1 h", 3600),
+        ("2 h", 7200),
+        ("5 h", 18000),
+    ]
+
+    var body: some View {
+        Menu {
+            if service.isActive {
+                Button(L.keepAwakeOff) { service.stop() }
+                Divider()
+            }
+            ForEach(Self.durations, id: \.0) { item in
+                Button(item.0) { service.start(duration: item.1) }
+            }
+        } label: {
+            VStack(spacing: 1) {
+                Image(systemName: service.isActive ? "pill.fill" : "pill")
+                    .font(.system(size: 13))
+                    .foregroundColor(service.isActive ? Color.PB.accent : Color.PB.textMuted)
+
+                if service.isActive, let endsAt = service.endsAt {
+                    // Live countdown — updates itself, no timers in the view
+                    Text(timerInterval: Date()...endsAt, countsDown: true)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                } else if service.isActive {
+                    Text("∞")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .frame(minWidth: 34)
+            .background(
+                RoundedRectangle(cornerRadius: CornerRadius.md)
+                    .fill(service.isActive ? Color.PB.accentDim : Color.PB.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: CornerRadius.md)
+                    .stroke(service.isActive ? Color.PB.accent.opacity(0.5) : Color.PB.separator, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(service.isActive ? L.keepAwakeActiveHelp : L.keepAwakeHelp)
     }
 }
 

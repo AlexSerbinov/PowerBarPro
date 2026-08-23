@@ -18,6 +18,9 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
     private let agentSessionsVM = AgentSessionsViewModel()
     /// Exposed so MenuBarManager can tint the menu bar fan line by mode.
     let fanControlVM = FanControlViewModel()
+    /// Lives here (not in the view) — the power assertion must survive the
+    /// popover content being torn down on close.
+    let keepAwake = KeepAwakeService()
     var settings: SettingsStorage?
     var onQuit: (() -> Void)?
 
@@ -92,6 +95,7 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
             processVM: processVM,
             agentSessionsVM: agentSessionsVM,
             fanControlVM: fanControlVM,
+            keepAwake: keepAwake,
             settingsModel: settings.map(PopoverSettingsModel.init),
             onQuit: onQuit,
             onHeightChange: { [weak popover, weak self] height in
