@@ -42,6 +42,11 @@ enum MacFans {
         static func setCurve(_ curve: Curve) -> Request { Request(cmd: "setCurve", curve: curve) }
     }
 
+    /// Muted rose for Battery Curve — systemPurple/systemPink read as loud
+    /// magenta on the dark theme, systemYellow was too much; this is the
+    /// desaturated middle ground.
+    static let curveTint = NSColor(red: 0.80, green: 0.52, blue: 0.62, alpha: 1)
+
     /// One colour per MODE — shared by the menu bar fan line, the HUD and
     /// the popover chips, so a glance at any of them answers "what mode am
     /// I in". Fill/level always shows how hard the fans actually work.
@@ -49,7 +54,7 @@ enum MacFans {
     static func modeTint(mode: Mode, pct: Int) -> NSColor {
         switch mode {
         case .auto: return .secondaryLabelColor
-        case .curve: return .systemYellow
+        case .curve: return curveTint
         case .manual:
             if pct >= 85 { return .systemOrange }
             return pct >= 50 ? .systemBlue : .systemGreen

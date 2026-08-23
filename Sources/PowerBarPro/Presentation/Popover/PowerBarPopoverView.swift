@@ -641,94 +641,96 @@ struct CollapsibleSection<Content: View>: View {
     }
 }
 
-// MARK: - Details Section (CPU clusters + sensors + fans, one disclosure)
+// MARK: - Details Section (system load + memory + temperatures)
 
 struct DetailsSectionView: View {
     let metrics: SystemMetrics?
     @State private var isExpanded = false
 
-    private var clusters: [CPUCluster] {
-        guard let soc = metrics?.soc else { return [] }
-        var result = soc.ecpuClusters
-        if let p = soc.pcpuCluster { result.append(p) }
-        return result
-    }
-
-    /// Hottest sensor per category, hottest categories first.
+    /// Hottest sensor per category (plus the battery pack), hottest first.
     private var groupedTemps: [(category: String, maxC: Double)] {
-        guard let temps = metrics?.temperatures, !temps.isEmpty else { return [] }
         var byCategory: [String: Double] = [:]
-        for t in temps {
+        for t in metrics?.temperatures ?? [] {
             let cat = t.category ?? "Other"
             byCategory[cat] = max(byCategory[cat] ?? 0, t.valueCelsius)
+        }
+        if let batteryC = metrics?.battery?.temperatureC {
+            byCategory["Battery"] = max(byCategory["Battery"] ?? 0, batteryC)
         }
         return byCategory.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
     }
 
-    private var fans: [FanMetrics] { metrics?.fans ?? [] }
+    /// macpow reports per-core usage already in percent (0-100).
+    private var cpuLoadPct: Double? {
+        guard let usage = metrics?.cpuUsagePct, !usage.isEmpty else { return nil }
+        return usage.reduce(0, +) / Double(usage.count)
+    }
+
+    /// GPU utilization 0-100 — the higher of device/renderer counters.
+    private var gpuLoadPct: Int? {
+        let device = metrics?.soc.gpuUtilDevice
+        let renderer = metrics?.soc.gpuUtilRenderer
+        switch (device, renderer) {
+        case let (d?, r?): return max(d, r)
+        case let (d?, nil): return d
+        case let (nil, r?): return r
+        default: return nil
+        }
+    }
 
     var body: some View {
-        if !clusters.isEmpty || !groupedTemps.isEmpty || !fans.isEmpty {
+        if metrics != nil {
             CollapsibleSection(
                 title: L.details,
                 badge: badgeText,
                 isExpanded: $isExpanded
             ) {
                 VStack(spacing: 2) {
+                    loadRows
                     systemStatsRows
 
-                    ForEach(clusters, id: \.name) { cluster in
-                        ClusterRowView(
-                            cluster: cluster,
-                            freqMhz: freq(for: cluster),
-                            maxW: maxClusterW
-                        )
-                    }
-                    if let gpuFreq = metrics?.soc.gpuFreqMhz, let gpuW = metrics?.gpuPower {
-                        ClusterRowView(
-                            cluster: CPUCluster(name: "GPU", totalW: gpuW, cores: []),
-                            freqMhz: gpuFreq,
-                            maxW: maxClusterW
-                        )
-                    }
-
-                    ForEach(groupedTemps.prefix(6), id: \.category) { item in
+                    ForEach(groupedTemps.prefix(7), id: \.category) { item in
                         SensorRowView(
-                            icon: "thermometer.medium",
+                            icon: item.category == "Battery" ? "battery.75" : "thermometer.medium",
                             name: item.category,
                             value: String(format: "%.0f°C", item.maxC),
                             valueColor: tempColor(item.maxC)
                         )
-                    }
-                    ForEach(fans, id: \.name) { fan in
-                        SensorRowView(
-                            icon: "fan",
-                            name: fan.name,
-                            value: String(format: "%.0f rpm", fan.actualRpm),
-                            valueColor: Color.PB.textPrimary
-                        )
+                        .help(tempHelp(item.category))
                     }
                 }
             }
         }
     }
 
-    /// System load / memory / swap / disk rows — syscall-backed, computed
-    /// per render only while the section is expanded.
     @ViewBuilder
-    private var systemStatsRows: some View {
-        let stats = SystemStatsProvider.current()
-
-        if let usage = metrics?.cpuUsagePct, !usage.isEmpty {
-            let avg = usage.reduce(0, +) / Double(usage.count) * 100
+    private var loadRows: some View {
+        if let cpu = cpuLoadPct {
             SensorRowView(
                 icon: "gauge.with.needle",
                 name: "CPU Load",
-                value: String(format: "%.0f%%", avg),
-                valueColor: avg >= 80 ? Color.PB.error : Color.PB.textPrimary
+                value: String(format: "%.0f%%", min(cpu, 100)),
+                valueColor: cpu >= 80 ? Color.PB.error : Color.PB.textPrimary
             )
-            .help(String(format: "Load avg (1m): %.2f", stats.loadAvg1))
+            .help(L.cpuLoadHelp)
         }
+
+        if let gpu = gpuLoadPct {
+            SensorRowView(
+                icon: "cpu.fill",
+                name: "GPU Load",
+                value: "\(min(gpu, 100))%",
+                valueColor: gpu >= 80 ? Color.PB.error : Color.PB.textPrimary
+            )
+            .help(L.gpuLoadHelp)
+        }
+    }
+
+    /// Memory / swap / disk rows — syscall-backed, computed per render only
+    /// while the section is expanded.
+    @ViewBuilder
+    private var systemStatsRows: some View {
+        let stats = SystemStatsProvider.current()
 
         if let used = metrics?.memUsedGb, let total = metrics?.dramGb {
             let pct = used / Double(total) * 100
@@ -738,6 +740,7 @@ struct DetailsSectionView: View {
                 value: String(format: "%.1f / %d GB", used, total),
                 valueColor: pct >= 90 ? Color.PB.error : Color.PB.textPrimary
             )
+            .help(L.ramHelp)
         }
 
         if stats.swapTotalBytes > 0 {
@@ -751,6 +754,7 @@ struct DetailsSectionView: View {
                 ),
                 valueColor: Color.PB.textPrimary
             )
+            .help(L.swapHelp)
         }
 
         if stats.diskTotalBytes > 0 {
@@ -773,23 +777,11 @@ struct DetailsSectionView: View {
 
     private var badgeText: String {
         var parts: [String] = []
-        let totalCores = clusters.reduce(0) { $0 + $1.cores.count }
-        if totalCores > 0 { parts.append("\(totalCores) cores") }
+        if let cpu = cpuLoadPct { parts.append(String(format: "%.0f%%", min(cpu, 100))) }
         if let hottest = groupedTemps.first {
             parts.append(String(format: "%.0f°C", hottest.maxC))
         }
         return parts.joined(separator: " · ")
-    }
-
-    private var maxClusterW: Double {
-        let values = clusters.map(\.totalW) + [metrics?.gpuPower ?? 0]
-        return max(values.max() ?? 1, 0.1)
-    }
-
-    /// E-clusters share ecpuFreqMhz; the P-cluster uses pcpuFreqMhz.
-    private func freq(for cluster: CPUCluster) -> Int? {
-        let isPerf = cluster.name == metrics?.soc.pcpuCluster?.name
-        return isPerf ? metrics?.soc.pcpuFreqMhz : metrics?.soc.ecpuFreqMhz
     }
 
     private func tempColor(_ celsius: Double) -> Color {
@@ -797,51 +789,12 @@ struct DetailsSectionView: View {
         if celsius >= 75 { return Color.PB.accent }
         return Color.PB.textPrimary
     }
-}
 
-struct ClusterRowView: View {
-    let cluster: CPUCluster
-    let freqMhz: Int?
-    let maxW: Double
-
-    var body: some View {
-        HStack(spacing: Spacing.sm) {
-            Text(cluster.name)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Color.PB.textPrimary)
-                .frame(width: 64, alignment: .leading)
-
-            // Relative load bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.PB.surface)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.PB.accent.opacity(0.7))
-                        .frame(width: max(2, geo.size.width * CGFloat(cluster.totalW / maxW)))
-                }
-            }
-            .frame(height: 5)
-
-            if let freq = freqMhz {
-                Text(freq >= 1000
-                     ? String(format: "%.1fGHz", Double(freq) / 1000)
-                     : "\(freq)MHz")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color.PB.textMuted)
-                    .frame(width: 52, alignment: .trailing)
-            }
-
-            Text(String(format: "%.2fW", cluster.totalW))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Color.PB.accent)
-                .frame(width: 48, alignment: .trailing)
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, 2)
-        .help(cluster.cores.isEmpty ? cluster.name : "\(cluster.name): \(cluster.cores.count) cores")
+    private func tempHelp(_ category: String) -> String {
+        category == "Battery" ? L.batteryTempHelp : L.sensorTempHelp(category)
     }
 }
+
 
 struct SensorRowView: View {
     let icon: String

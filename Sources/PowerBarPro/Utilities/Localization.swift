@@ -104,6 +104,36 @@ enum L {
     }
     static var cpuClusters: String { lang == .ukrainian ? "КЛАСТЕРИ CPU" : "CPU CLUSTERS" }
     static var details: String { lang == .ukrainian ? "ДЕТАЛІ" : "DETAILS" }
+    static var cpuLoadHelp: String {
+        lang == .ukrainian
+            ? "Середнє завантаження всіх ядер CPU (0–100%)."
+            : "Average load across all CPU cores (0–100%)."
+    }
+    static var gpuLoadHelp: String {
+        lang == .ukrainian
+            ? "Завантаження GPU (0–100%)."
+            : "GPU utilization (0–100%)."
+    }
+    static var ramHelp: String {
+        lang == .ukrainian
+            ? "Використана оперативна пам'ять із загального обсягу unified memory."
+            : "Used RAM out of total unified memory."
+    }
+    static var swapHelp: String {
+        lang == .ukrainian
+            ? "Використаний swap на диску. Постійно великий swap = бракує RAM."
+            : "Swap used on disk. Consistently high swap means you're short on RAM."
+    }
+    static var batteryTempHelp: String {
+        lang == .ukrainian
+            ? "Температура батареї — саме її ви відчуваєте під долонями; вона ж керує Battery Curve."
+            : "Battery pack temperature — what you feel under the palm rest; it also drives Battery Curve."
+    }
+    static func sensorTempHelp(_ category: String) -> String {
+        lang == .ukrainian
+            ? "Найгарячіший сенсор категорії \(category)."
+            : "Hottest \(category) sensor."
+    }
     static var sensors: String { lang == .ukrainian ? "СЕНСОРИ" : "SENSORS" }
     static var agentSessions: String { lang == .ukrainian ? "СЕСІЇ АГЕНТІВ" : "AGENT SESSIONS" }
     static var fanControl: String { lang == .ukrainian ? "ВЕНТИЛЯТОРИ" : "FAN CONTROL" }
