@@ -473,6 +473,10 @@ struct SettingPickerRow: View {
                 .foregroundColor(Color.PB.textMuted)
                 .lineLimit(1)
 
+            if let help {
+                InfoHintView(text: help)
+            }
+
             Spacer()
 
             Menu {
@@ -501,6 +505,19 @@ struct SettingPickerRow: View {
     }
 }
 
+/// Small ⓘ that makes a row's tooltip discoverable — hover shows the
+/// explanation immediately via the same system help balloon.
+struct InfoHintView: View {
+    let text: String
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.system(size: 9))
+            .foregroundColor(Color.PB.textMuted.opacity(0.7))
+            .help(text)
+    }
+}
+
 struct SettingToggleRow: View {
     let label: String
     let icon: String
@@ -518,6 +535,10 @@ struct SettingToggleRow: View {
                 .font(Font.PB.caption)
                 .foregroundColor(Color.PB.textMuted)
                 .lineLimit(1)
+
+            if let help {
+                InfoHintView(text: help)
+            }
 
             Spacer()
 
