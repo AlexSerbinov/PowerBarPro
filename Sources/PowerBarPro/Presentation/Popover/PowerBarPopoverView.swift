@@ -19,6 +19,7 @@ struct PowerBarPopoverView: View {
     @ObservedObject var batteryVM: BatteryViewModel
     @ObservedObject var processVM: ProcessListViewModel
     var agentSessionsVM: AgentSessionsViewModel?
+    var fanControlVM: FanControlViewModel?
     var settingsModel: PopoverSettingsModel?
     var onQuit: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
@@ -81,8 +82,11 @@ struct PowerBarPopoverView: View {
 
             SectionSeparator()
 
-            // 5. Progressive disclosure: details, processes, agent sessions
+            // 5. Progressive disclosure: fan control, details, processes, sessions
             VStack(spacing: Spacing.sm) {
+                if let fanVM = fanControlVM, fanVM.isAvailable {
+                    FanControlSectionView(vm: fanVM)
+                }
                 DetailsSectionView(metrics: powerVM.currentMetrics)
                 ProcessListSectionView(processVM: processVM)
                 if let sessionsVM = agentSessionsVM {
@@ -1024,6 +1028,148 @@ struct ProcessRowView: View {
     private func iconResized(_ icon: NSImage) -> NSImage {
         icon.size = NSSize(width: 16, height: 16)
         return icon
+    }
+}
+
+// MARK: - Fan Control (MacFans daemon)
+
+/// Fan mode switcher in MacFans style: Automatic / Battery Curve rows +
+/// fixed-speed chips. Uses the info-blue accent so fan controls read as a
+/// distinct subsystem from the amber power readouts.
+struct FanControlSectionView: View {
+    @ObservedObject var vm: FanControlViewModel
+    @State private var isExpanded = false
+
+    private static let fixedPresets = [30, 50, 70, 85, 100]
+    private let fanColor = Color.PB.info
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                if isExpanded { vm.refresh() }
+            }) {
+                HStack {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.PB.textMuted)
+                        .frame(width: 10)
+
+                    Text(L.fanControl)
+                        .font(Font.PB.sectionTitle)
+                        .tracking(1.5)
+                        .foregroundColor(Color.PB.textMuted)
+
+                    Spacer()
+
+                    Text(badgeText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(fanColor)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, Spacing.md)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    modeRow(
+                        title: "Automatic",
+                        subtitle: "macOS curve",
+                        isActive: vm.reply?.mode == .auto,
+                        help: L.fanAutoHelp,
+                        action: { vm.setAuto() }
+                    )
+
+                    modeRow(
+                        title: "Battery Curve",
+                        subtitle: curveSubtitle,
+                        isActive: vm.reply?.mode == .curve,
+                        help: L.fanCurveHelp,
+                        action: { vm.setCurve() }
+                    )
+
+                    Text(L.fixedSpeed)
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(1)
+                        .foregroundColor(Color.PB.textMuted)
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.top, Spacing.xs)
+
+                    HStack(spacing: Spacing.xs) {
+                        ForEach(Self.fixedPresets, id: \.self) { pct in
+                            Button(action: { vm.setManual(pct) }) {
+                                Text("\(pct)")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .fontWeight(isFixedActive(pct) ? .bold : .regular)
+                                    .foregroundColor(isFixedActive(pct) ? Color.PB.bg : Color.PB.textPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: CornerRadius.sm)
+                                            .fill(isFixedActive(pct) ? fanColor : Color.PB.surface)
+                                    )
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Spacing.md)
+                    .help(L.fanFixedHelp)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private var badgeText: String {
+        guard let reply = vm.reply else {
+            return vm.isBusy ? "…" : "—"
+        }
+        return "\(reply.modeTitle) · \(reply.rpmText) rpm"
+    }
+
+    private var curveSubtitle: String {
+        guard let curve = vm.reply?.curve else { return "battery temp" }
+        return String(format: "%.0f→%.0f °C", curve.lowTemp, curve.highTemp)
+    }
+
+    private func isFixedActive(_ pct: Int) -> Bool {
+        vm.reply?.mode == .manual && vm.reply?.pct == pct
+    }
+
+    private func modeRow(
+        title: String,
+        subtitle: String,
+        isActive: Bool,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(fanColor)
+                    .frame(width: 12)
+                    .opacity(isActive ? 1 : 0)
+
+                Text(title)
+                    .font(Font.PB.body)
+                    .foregroundColor(isActive ? Color.PB.textPrimary : Color.PB.textMuted)
+
+                Text(subtitle)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color.PB.textMuted)
+
+                Spacer()
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 

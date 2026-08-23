@@ -106,6 +106,23 @@ enum L {
     static var details: String { lang == .ukrainian ? "ДЕТАЛІ" : "DETAILS" }
     static var sensors: String { lang == .ukrainian ? "СЕНСОРИ" : "SENSORS" }
     static var agentSessions: String { lang == .ukrainian ? "СЕСІЇ АГЕНТІВ" : "AGENT SESSIONS" }
+    static var fanControl: String { lang == .ukrainian ? "ВЕНТИЛЯТОРИ" : "FAN CONTROL" }
+    static var fixedSpeed: String { lang == .ukrainian ? "ФІКСОВАНА ШВИДКІСТЬ" : "FIXED SPEED" }
+    static var fanAutoHelp: String {
+        lang == .ukrainian
+            ? "Повернути керування вентиляторами macOS (стандартна крива)."
+            : "Give fan control back to macOS (standard curve)."
+    }
+    static var fanCurveHelp: String {
+        lang == .ukrainian
+            ? "Швидкість слідує за температурою батареї (лінійна крива, налаштована в MacFans)."
+            : "Speed follows battery temperature (linear curve configured in MacFans)."
+    }
+    static var fanFixedHelp: String {
+        lang == .ukrainian
+            ? "Зафіксувати всі вентилятори на відсотку їхнього діапазону min–max."
+            : "Pin every fan to a percentage of its own min–max range."
+    }
     static var noAgentSessions: String {
         lang == .ukrainian ? "Немає сесій Claude Code / Codex CLI" : "No Claude Code / Codex CLI sessions"
     }

@@ -123,10 +123,10 @@ final class MenuBarManager: NSObject {
     /// The thin fan-load bar overlaid at the bottom of the status button.
     private var fanBarView: FanBarView?
 
-    /// Menu bar content: native wattage title + fan-load bar subview at the
-    /// bottom (MacFans-style). A subview is used instead of a rendered
-    /// NSImage: the status bar clips/normalizes custom images, which ate
-    /// the bar entirely. Hidden automatically on fanless Macs.
+    /// Menu bar content: native wattage title + a thin fan-load bar pinned
+    /// to the bottom of the status button (MacFans-style), color-coded by
+    /// load. Falls back to plain text on fanless Macs; if the system ever
+    /// refuses to composite the subview, the title alone still renders.
     private func updateStatusButton(text: String) {
         guard let button = statusItem?.button else { return }
         button.title = text
@@ -148,8 +148,8 @@ final class MenuBarManager: NSObject {
         bar.translatesAutoresizingMaskIntoConstraints = false
         button.addSubview(bar)
         NSLayoutConstraint.activate([
-            bar.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 4),
-            bar.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -4),
+            bar.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 5),
+            bar.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -5),
             bar.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1.5),
             bar.heightAnchor.constraint(equalToConstant: 3),
         ])
@@ -394,46 +394,34 @@ extension MenuBarManager: NSMenuDelegate {
 
 // MARK: - Fan bar view (bottom of the status button)
 
-/// Thin rounded progress bar rendered with CALayers — track + colored fill.
+/// Thin rounded progress bar (track + colored fill) drawn with NSBezierPath.
 final class FanBarView: NSView {
 
-    private let track = CALayer()
-    private let fill = CALayer()
     private var fraction: Double = 0
     private var fillColor: NSColor = .systemGreen
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        track.cornerRadius = 1.5
-        fill.cornerRadius = 1.5
-        layer?.addSublayer(track)
-        layer?.addSublayer(fill)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
     func update(fraction: Double, color: NSColor) {
-        self.fraction = max(0, min(1, fraction))
-        self.fillColor = color
-        needsLayout = true
+        let clamped = max(0, min(1, fraction))
+        if clamped != self.fraction || color != fillColor {
+            self.fraction = clamped
+            self.fillColor = color
+            needsDisplay = true
+        }
     }
 
-    override func layout() {
-        super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        track.frame = bounds
-        fill.frame = CGRect(
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+
+        NSColor.labelColor.withAlphaComponent(0.18).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+
+        let fill = NSRect(
             x: 0, y: 0,
             width: max(bounds.height, bounds.width * CGFloat(fraction)),
             height: bounds.height
         )
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            track.backgroundColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
-            fill.backgroundColor = fillColor.cgColor
-        }
-        CATransaction.commit()
+        fillColor.setFill()
+        NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
     }
 
     /// The bar is decorative — clicks belong to the status button.

@@ -16,6 +16,7 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
     private let batteryVM: BatteryViewModel
     private let processVM: ProcessListViewModel
     private let agentSessionsVM = AgentSessionsViewModel()
+    private let fanControlVM = FanControlViewModel()
     var settings: SettingsStorage?
     var onQuit: (() -> Void)?
 
@@ -84,6 +85,7 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
             batteryVM: batteryVM,
             processVM: processVM,
             agentSessionsVM: agentSessionsVM,
+            fanControlVM: fanControlVM,
             settingsModel: settings.map(PopoverSettingsModel.init),
             onQuit: onQuit,
             onHeightChange: { [weak popover, weak self] height in

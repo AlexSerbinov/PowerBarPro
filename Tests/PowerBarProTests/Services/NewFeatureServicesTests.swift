@@ -257,3 +257,26 @@ final class FanLoadFractionTests: XCTestCase {
         XCTAssertNotEqual(MenuBarManager.fanBarColor(0.5), .systemRed)
     }
 }
+
+// MARK: - MacFans client (integration, machine-guarded)
+
+final class MacFansClientTests: XCTestCase {
+
+    /// Read-only round-trip against the live daemon. Skipped on machines
+    /// without MacFans installed — never changes fan state.
+    func testStatusRoundTrip() throws {
+        try XCTSkipUnless(MacFans.daemonInstalled, "macfansd not installed")
+        let reply = try MacFans.send(.status)
+        XCTAssertTrue(reply.ok)
+        XCTAssertFalse(reply.fans.isEmpty)
+        XCTAssertGreaterThan(reply.fans[0].max, reply.fans[0].min)
+    }
+
+    func testRequestEncoding() throws {
+        let data = try JSONEncoder().encode(MacFans.Request.manual(70))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["cmd"] as? String, "set")
+        XCTAssertEqual(json["mode"] as? String, "manual")
+        XCTAssertEqual(json["pct"] as? Int, 70)
+    }
+}
