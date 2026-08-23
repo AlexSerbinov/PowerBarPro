@@ -63,16 +63,9 @@ struct PowerBarPopoverView: View {
             HeaderRowView(metrics: powerVM.currentMetrics, batteryVM: batteryVM)
                 .padding(.bottom, Spacing.sm)
 
-            // 2. Component strip: CPU / GPU / PKG / RAM in one row
+            // 2. Component strip: CPU / GPU / PKG / RAM / DSP in one row
             MetricStripView(metrics: powerVM.currentMetrics)
                 .padding(.bottom, Spacing.sm)
-
-            // 3. One-line ambient status: display + hottest temp
-            StatusLineView(
-                metrics: powerVM.currentMetrics,
-                displayW: processVM.displayPowerW
-            )
-            .padding(.bottom, Spacing.sm)
 
             SectionSeparator()
 
@@ -220,6 +213,8 @@ struct MetricStripView: View {
             cell("PKG", value: metrics?.allPower, help: pkgHelp)
             divider
             cell("RAM", value: metrics?.ramPower, help: ramHelp)
+            divider
+            cell("DSP", value: displayW, help: dspHelp)
         }
         .padding(.vertical, Spacing.sm)
         .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.PB.surface))
@@ -265,57 +260,18 @@ struct MetricStripView: View {
         let size = m.dramGb.map { " · \($0) GB unified" } ?? ""
         return String(format: "DRAM %.2fW%@", m.ramPower, size)
     }
-}
 
-// MARK: - Status Line (display + hottest temp, one row)
-
-struct StatusLineView: View {
-    let metrics: SystemMetrics?
-    let displayW: Double
-
-    var body: some View {
-        if hasContent {
-            HStack(spacing: Spacing.sm) {
-                if let display = metrics?.display, display.available {
-                    Image(systemName: "display")
-                        .font(.system(size: 9))
-                        .foregroundColor(Color.PB.textMuted)
-                    Text(String(format: "%.1fW · %.0f%%", displayW, display.brightnessPct))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(Color.PB.textMuted)
-                        .help("\(L.display): \(String(format: "%.2fW", displayW)) · \(L.brightness) \(String(format: "%.0f%%", display.brightnessPct))")
-                }
-
-                Spacer()
-
-                if let temp = hottestTemp {
-                    Image(systemName: "thermometer.medium")
-                        .font(.system(size: 9))
-                        .foregroundColor(Color.PB.textMuted)
-                    Text(String(format: "%.0f°C", temp.1))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(tempColor(temp.1))
-                        .help("\(temp.0): \(String(format: "%.0f°C", temp.1))")
-                }
-            }
-            .padding(.horizontal, 2)
-        }
+    /// Display draw: the higher of the backlight sensor and the model estimate.
+    private var displayW: Double? {
+        guard let m = metrics else { return nil }
+        let value = max(m.backlightPowerW, m.display?.estimatedPowerW ?? 0)
+        return value > 0 ? value : nil
     }
 
-    private var hasContent: Bool {
-        (metrics?.display?.available ?? false) || hottestTemp != nil
-    }
-
-    private var hottestTemp: (String, Double)? {
-        guard let temps = metrics?.temperatures, !temps.isEmpty else { return nil }
-        let hottest = temps.max { $0.valueCelsius < $1.valueCelsius }
-        return hottest.map { ($0.category ?? $0.key, $0.valueCelsius) }
-    }
-
-    private func tempColor(_ celsius: Double) -> Color {
-        if celsius >= 90 { return Color.PB.error }
-        if celsius >= 75 { return Color.PB.accent }
-        return Color.PB.textMuted
+    private var dspHelp: String {
+        guard let m = metrics, let w = displayW else { return "Display" }
+        let brightness = m.display.map { String(format: " · %.0f%% %@", $0.brightnessPct, L.brightness) } ?? ""
+        return String(format: "%@ %.2fW%@", L.display, w, brightness)
     }
 }
 
