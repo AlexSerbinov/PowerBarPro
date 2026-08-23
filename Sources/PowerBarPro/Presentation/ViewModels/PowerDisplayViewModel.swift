@@ -53,6 +53,11 @@ final class PowerDisplayViewModel: ObservableObject {
         aggregator.resolvedPower(for: mode, instant: currentMetrics)
     }
 
+    /// Timestamped history readings for the given window (for the history chart).
+    func historyReadings(seconds: Int) -> [PowerReading] {
+        aggregator.readings(for: seconds)
+    }
+
     // MARK: - Private
 
     private func bindPowerMonitor() {

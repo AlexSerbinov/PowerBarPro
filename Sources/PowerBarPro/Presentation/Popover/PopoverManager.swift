@@ -33,7 +33,7 @@ final class PopoverManager {
             powerVM: powerVM,
             batteryVM: batteryVM,
             processVM: processVM,
-            settings: settings,
+            settingsModel: settings.map(PopoverSettingsModel.init),
             onQuit: onQuit
         )
 

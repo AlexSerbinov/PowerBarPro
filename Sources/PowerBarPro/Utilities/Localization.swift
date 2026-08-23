@@ -47,6 +47,35 @@ enum L {
     static var charging: String { lang == .ukrainian ? "заряджається" : "charging" }
     static var brightness: String { lang == .ukrainian ? "яскравість" : "brightness" }
 
+    // Settings rows & tooltips
+    static var batteryAveraging: String { lang == .ukrainian ? "Усереднення батареї" : "Battery Averaging" }
+    static var averagingPeriodHelp: String {
+        lang == .ukrainian
+            ? "Вікно усереднення для ватів у меню-барі та Total Power. Instant — сире останнє значення без згладжування."
+            : "Averaging window for the menu bar wattage and Total Power. Instant shows the raw latest sample with no smoothing."
+    }
+    static var batteryAveragingHelp: String {
+        lang == .ukrainian
+            ? "Вікно усереднення споживання, з якого рахується прогноз «скільки протримається батарея». Довше вікно — стабільніший прогноз."
+            : "Averaging window of power draw used for the battery time-remaining estimate. A longer window gives a steadier estimate."
+    }
+    static var processAveragingHelp: String {
+        lang == .ukrainian
+            ? "Згладжування ватів у списку процесів. Raw — миттєві значення, стрибають сильніше."
+            : "Smoothing window for per-process wattage in the process list. Raw shows instant values, which jump around more."
+    }
+    static var refreshRateHelp: String {
+        lang == .ukrainian
+            ? "Як часто опитуються апаратні лічильники енергії. Частіше — точніше, але трохи більше власного споживання."
+            : "How often the hardware energy counters are sampled. Faster is more responsive but costs slightly more power itself."
+    }
+    static var untilFull: String { lang == .ukrainian ? "до повного" : "until full" }
+    static var timeRemainingHelp: String {
+        lang == .ukrainian
+            ? "Оцінка часу роботи від батареї на основі усередненого споживання (див. Усереднення батареї в налаштуваннях)."
+            : "Battery time estimate based on averaged power draw (see Battery Averaging in settings)."
+    }
+
     // Time periods
     static func seconds(_ n: Int) -> String { lang == .ukrainian ? "\(n) секунд" : "\(n) seconds" }
     static func minutes(_ n: Int) -> String { lang == .ukrainian ? "\(n) хвилин" : "\(n) minutes" }
