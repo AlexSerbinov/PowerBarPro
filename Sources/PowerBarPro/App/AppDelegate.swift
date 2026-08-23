@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        container?.historyPersistence.saveNow()
+        container?.historyPersistence.stop()
         container?.powerMonitor.stopMonitoring()
         container?.menuBarManager.tearDown()
     }

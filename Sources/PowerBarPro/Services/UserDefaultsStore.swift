@@ -11,6 +11,8 @@ final class UserDefaultsStore: SettingsStorage {
         static let updateIntervalMs = "powerbar.updateIntervalMs"
         static let processAveragingSeconds = "powerbar.processAveragingSeconds"
         static let language = "powerbar.language"
+        static let alertsEnabled = "powerbar.alertsEnabled"
+        static let alertThresholdW = "powerbar.alertThresholdW"
     }
 
     // MARK: - Backing storage
@@ -20,6 +22,8 @@ final class UserDefaultsStore: SettingsStorage {
     @Published var updateIntervalMs: Int
     @Published var processAveragingSeconds: Int
     @Published var language: AppLanguage
+    @Published var alertsEnabled: Bool
+    @Published var alertThresholdW: Int
 
     // MARK: - Publishers
 
@@ -37,6 +41,12 @@ final class UserDefaultsStore: SettingsStorage {
     }
     var languagePublisher: AnyPublisher<AppLanguage, Never> {
         $language.eraseToAnyPublisher()
+    }
+    var alertsEnabledPublisher: AnyPublisher<Bool, Never> {
+        $alertsEnabled.eraseToAnyPublisher()
+    }
+    var alertThresholdWPublisher: AnyPublisher<Int, Never> {
+        $alertThresholdW.eraseToAnyPublisher()
     }
 
     // MARK: - Init
@@ -72,6 +82,11 @@ final class UserDefaultsStore: SettingsStorage {
         } else {
             self.language = AppLanguage.system
         }
+
+        // Alerts: default enabled, 25W threshold
+        self.alertsEnabled = defaults.object(forKey: Keys.alertsEnabled) as? Bool ?? true
+        let savedThreshold = defaults.integer(forKey: Keys.alertThresholdW)
+        self.alertThresholdW = savedThreshold > 0 ? savedThreshold : Constants.Defaults.alertThresholdW
 
         // Sync L.lang with initial value
         L.lang = self.language
@@ -110,6 +125,20 @@ final class UserDefaultsStore: SettingsStorage {
             .sink { [weak self] lang in
                 self?.defaults.set(lang.rawValue, forKey: Keys.language)
                 L.lang = lang
+            }
+            .store(in: &cancellables)
+
+        $alertsEnabled
+            .dropFirst()
+            .sink { [weak self] enabled in
+                self?.defaults.set(enabled, forKey: Keys.alertsEnabled)
+            }
+            .store(in: &cancellables)
+
+        $alertThresholdW
+            .dropFirst()
+            .sink { [weak self] watts in
+                self?.defaults.set(watts, forKey: Keys.alertThresholdW)
             }
             .store(in: &cancellables)
     }

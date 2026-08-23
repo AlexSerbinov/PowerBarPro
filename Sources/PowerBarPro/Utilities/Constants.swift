@@ -38,6 +38,7 @@ enum Constants {
         static let availableAveragePeriods = [3, 10, 30, 60, 300, 600, 1800, 3600, 0]
         static let processAveragingSeconds = 30  // Default: 30s averaging for process list
         static let availableProcessAveragingPeriods = [0, 5, 10, 30, 60, 300]  // 0 = instant
+        static let alertThresholdW = 25  // Power-hog alert threshold
     }
 
     enum UI {

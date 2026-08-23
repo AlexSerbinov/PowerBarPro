@@ -50,6 +50,9 @@ final class PopoverSnapshotTests: XCTestCase {
             powerVM: powerVM,
             batteryVM: batteryVM,
             processVM: processVM,
+            agentSessionsVM: AgentSessionsViewModel(
+                service: AgentSessionsService(runTool: { _, _ in "" })
+            ),
             settingsModel: PopoverSettingsModel(settings: settings),
             onQuit: nil
         )

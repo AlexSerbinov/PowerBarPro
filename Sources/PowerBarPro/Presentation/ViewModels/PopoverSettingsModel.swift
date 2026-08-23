@@ -12,6 +12,8 @@ final class PopoverSettingsModel: ObservableObject {
     @Published var batteryModeSeconds: Int
     @Published var processAveragingSeconds: Int
     @Published var updateIntervalMs: Int
+    @Published var alertsEnabled: Bool
+    @Published var alertThresholdW: Int
 
     private let settings: SettingsStorage
     private var cancellables = Set<AnyCancellable>()
@@ -22,6 +24,8 @@ final class PopoverSettingsModel: ObservableObject {
         self.batteryModeSeconds = Self.seconds(of: settings.batteryDisplayMode)
         self.processAveragingSeconds = settings.processAveragingSeconds
         self.updateIntervalMs = settings.updateIntervalMs
+        self.alertsEnabled = settings.alertsEnabled
+        self.alertThresholdW = settings.alertThresholdW
 
         bindStorageToModel()
         bindModelToStorage()
@@ -63,6 +67,22 @@ final class PopoverSettingsModel: ObservableObject {
                 if self?.updateIntervalMs != ms { self?.updateIntervalMs = ms }
             }
             .store(in: &cancellables)
+
+        settings.alertsEnabledPublisher
+            .dropFirst()  // initial value read synchronously in init; async replay may be stale
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled in
+                if self?.alertsEnabled != enabled { self?.alertsEnabled = enabled }
+            }
+            .store(in: &cancellables)
+
+        settings.alertThresholdWPublisher
+            .dropFirst()  // initial value read synchronously in init; async replay may be stale
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] watts in
+                if self?.alertThresholdW != watts { self?.alertThresholdW = watts }
+            }
+            .store(in: &cancellables)
     }
 
     private func bindModelToStorage() {
@@ -93,6 +113,20 @@ final class PopoverSettingsModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] ms in
                 if self?.settings.updateIntervalMs != ms { self?.settings.updateIntervalMs = ms }
+            }
+            .store(in: &cancellables)
+
+        $alertsEnabled
+            .dropFirst()
+            .sink { [weak self] enabled in
+                if self?.settings.alertsEnabled != enabled { self?.settings.alertsEnabled = enabled }
+            }
+            .store(in: &cancellables)
+
+        $alertThresholdW
+            .dropFirst()
+            .sink { [weak self] watts in
+                if self?.settings.alertThresholdW != watts { self?.settings.alertThresholdW = watts }
             }
             .store(in: &cancellables)
     }

@@ -17,6 +17,8 @@ final class DependencyContainer {
     let calibrationService: CalibrationService
     let coalitionGrouper: CoalitionGrouping
     let processDescriptionService: ProcessDescriptionService
+    let historyPersistence: HistoryPersistenceService
+    let alertService: PowerAlertService
 
     // MARK: - ViewModels
 
@@ -64,6 +66,12 @@ final class DependencyContainer {
         engine.globalCoefficient = calibration.store.globalCoefficient
 
         processDescriptionService = ProcessDescriptionService()
+        historyPersistence = HistoryPersistenceService(aggregator: powerAggregator)
+        historyPersistence.start()
+        alertService = PowerAlertService(
+            notifier: UserNotificationNotifier(),
+            settings: settings
+        )
 
         // Layer 3: ViewModels
         powerDisplayVM = PowerDisplayViewModel(
@@ -84,6 +92,9 @@ final class DependencyContainer {
             attributionEngine: engine,
             coalitionGrouper: coalitionGrouper
         )
+
+        // Power-hog alerts watch the attributed process stream
+        alertService.bind(to: processListVM.$attributedProcesses.eraseToAnyPublisher())
 
         // Layer 4: Presentation
         menuBarManager = MenuBarManager(

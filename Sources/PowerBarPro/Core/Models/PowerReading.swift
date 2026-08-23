@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single timestamped power sample stored in the rolling history buffer.
-struct PowerReading: Identifiable, Sendable {
+struct PowerReading: Identifiable, Sendable, Codable {
     let id: UUID
     let allPower: Double
     let sysPower: Double

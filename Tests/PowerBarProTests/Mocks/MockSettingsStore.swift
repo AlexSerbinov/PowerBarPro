@@ -10,6 +10,15 @@ final class MockSettingsStore: SettingsStorage {
     @Published var updateIntervalMs: Int
     @Published var processAveragingSeconds: Int
     @Published var language: AppLanguage
+    @Published var alertsEnabled: Bool = true
+    @Published var alertThresholdW: Int = Constants.Defaults.alertThresholdW
+
+    var alertsEnabledPublisher: AnyPublisher<Bool, Never> {
+        $alertsEnabled.eraseToAnyPublisher()
+    }
+    var alertThresholdWPublisher: AnyPublisher<Int, Never> {
+        $alertThresholdW.eraseToAnyPublisher()
+    }
 
     var displayModePublisher: AnyPublisher<DisplayMode, Never> {
         $displayMode.eraseToAnyPublisher()

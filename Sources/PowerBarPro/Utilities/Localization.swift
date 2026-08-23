@@ -70,6 +70,59 @@ enum L {
             : "How often the hardware energy counters are sampled. Faster is more responsive but costs slightly more power itself."
     }
     static var untilFull: String { lang == .ukrainian ? "до повного" : "until full" }
+    static var powerAlerts: String { lang == .ukrainian ? "Алерти споживання" : "Power Alerts" }
+    static var alertThreshold: String { lang == .ukrainian ? "Поріг алерту" : "Alert Threshold" }
+    static var launchAtLogin: String { lang == .ukrainian ? "Запуск при вході" : "Launch at Login" }
+    static var powerAlertsHelp: String {
+        lang == .ukrainian
+            ? "Сповіщення, коли один застосунок споживає більше порогу довше 5 хвилин поспіль."
+            : "Notify when a single app draws more than the threshold continuously for 5 minutes."
+    }
+    static var alertThresholdHelp: String {
+        lang == .ukrainian
+            ? "Скільки ват має споживати застосунок, щоб спрацював алерт."
+            : "How many watts an app must draw to trigger the alert."
+    }
+    static var launchAtLoginHelp: String {
+        lang == .ukrainian
+            ? "Автоматично запускати PowerBarPro після входу в систему."
+            : "Start PowerBarPro automatically when you log in."
+    }
+    static func alertTitle(_ app: String) -> String {
+        lang == .ukrainian ? "\(app) тягне багато енергії" : "\(app) is drawing a lot of power"
+    }
+    static func alertBody(watts: Double, minutes: Int) -> String {
+        lang == .ukrainian
+            ? String(format: "≈%.0f Вт уже %d хв поспіль. Можливо, варто його закрити.", watts, minutes)
+            : String(format: "≈%.0fW for %d min straight. Consider closing it.", watts, minutes)
+    }
+    static var session: String { lang == .ukrainian ? "сесія" : "session" }
+    static var sessionEnergyHelp: String {
+        lang == .ukrainian
+            ? "Скільки енергії система спожила за час роботи PowerBarPro, і середня потужність за сесію."
+            : "Energy the system consumed while PowerBarPro has been running, and the session's average power."
+    }
+    static var cpuClusters: String { lang == .ukrainian ? "КЛАСТЕРИ CPU" : "CPU CLUSTERS" }
+    static var sensors: String { lang == .ukrainian ? "СЕНСОРИ" : "SENSORS" }
+    static var agentSessions: String { lang == .ukrainian ? "СЕСІЇ АГЕНТІВ" : "AGENT SESSIONS" }
+    static var noAgentSessions: String {
+        lang == .ukrainian ? "Немає сесій Claude Code / Codex CLI" : "No Claude Code / Codex CLI sessions"
+    }
+    static var refresh: String { lang == .ukrainian ? "Оновити" : "Refresh" }
+    static var cancel: String { lang == .ukrainian ? "Скасувати" : "Cancel" }
+    static var showInFinder: String { lang == .ukrainian ? "Показати у Finder" : "Show in Finder" }
+    static var killSessionConfirm: String { lang == .ukrainian ? "Завершити сесію" : "Quit Session" }
+    static func killSessionTitle(_ label: String, pid: Int32) -> String {
+        lang == .ukrainian ? "Завершити сесію «\(label)» (PID \(pid))?" : "Quit session “\(label)” (PID \(pid))?"
+    }
+    static var killSessionBody: String {
+        lang == .ukrainian
+            ? "Розмова зберігається на диску — `claude --resume` / `codex resume` у тій самій теці поверне її."
+            : "The conversation is preserved on disk — `claude --resume` / `codex resume` in the same folder brings it back."
+    }
+    static func helpers(_ mb: Int) -> String {
+        lang == .ukrainian ? "MCP та хелпери \(mb) MB" : "MCP & helpers \(mb) MB"
+    }
     static var timeRemainingHelp: String {
         lang == .ukrainian
             ? "Оцінка часу роботи від батареї на основі усередненого споживання (див. Усереднення батареї в налаштуваннях)."

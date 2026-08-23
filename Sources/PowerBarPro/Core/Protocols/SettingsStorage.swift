@@ -23,4 +23,12 @@ protocol SettingsStorage: AnyObject {
     /// App language setting.
     var language: AppLanguage { get set }
     var languagePublisher: AnyPublisher<AppLanguage, Never> { get }
+
+    /// Power-hog notifications on/off.
+    var alertsEnabled: Bool { get set }
+    var alertsEnabledPublisher: AnyPublisher<Bool, Never> { get }
+
+    /// Per-app wattage threshold (W) that triggers a power-hog alert.
+    var alertThresholdW: Int { get set }
+    var alertThresholdWPublisher: AnyPublisher<Int, Never> { get }
 }

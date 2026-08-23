@@ -10,6 +10,7 @@ final class PopoverManager {
     private let powerVM: PowerDisplayViewModel
     private let batteryVM: BatteryViewModel
     private let processVM: ProcessListViewModel
+    private let agentSessionsVM = AgentSessionsViewModel()
     var settings: SettingsStorage?
     var onQuit: (() -> Void)?
 
@@ -33,6 +34,7 @@ final class PopoverManager {
             powerVM: powerVM,
             batteryVM: batteryVM,
             processVM: processVM,
+            agentSessionsVM: agentSessionsVM,
             settingsModel: settings.map(PopoverSettingsModel.init),
             onQuit: onQuit
         )

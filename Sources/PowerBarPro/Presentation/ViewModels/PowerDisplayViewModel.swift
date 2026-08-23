@@ -12,11 +12,15 @@ final class PowerDisplayViewModel: ObservableObject {
     @Published private(set) var detailsText: String = "Power Details"
     @Published private(set) var isError: Bool = false
 
+    /// "0.82Wh · avg 11.2W · 42m" — energy consumed this app session.
+    @Published private(set) var sessionSummary: String = ""
+
     // MARK: - Dependencies
 
     private let powerMonitor: PowerMonitoring
     private let aggregator: PowerAggregating
     private let settings: SettingsStorage
+    private let sessionTracker: SessionEnergyTracker
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - State
@@ -31,11 +35,13 @@ final class PowerDisplayViewModel: ObservableObject {
     init(
         powerMonitor: PowerMonitoring,
         aggregator: PowerAggregating,
-        settings: SettingsStorage
+        settings: SettingsStorage,
+        sessionTracker: SessionEnergyTracker = SessionEnergyTracker()
     ) {
         self.powerMonitor = powerMonitor
         self.aggregator = aggregator
         self.settings = settings
+        self.sessionTracker = sessionTracker
 
         bindPowerMonitor()
         bindSettings()
@@ -68,6 +74,8 @@ final class PowerDisplayViewModel: ObservableObject {
                 if let m = metrics {
                     let reading = PowerReading(allPower: m.allPower, sysPower: m.sysPower)
                     self?.aggregator.record(reading)
+                    self?.sessionTracker.record(watts: m.sysPower)
+                    self?.updateSessionSummary()
                 }
                 self?.updateDisplay()
             }
@@ -153,5 +161,23 @@ final class PowerDisplayViewModel: ObservableObject {
 
         // Details menu item
         detailsText = Formatters.inlineBreakdown(metrics)
+    }
+
+    private func updateSessionSummary() {
+        let wh = sessionTracker.energyWh
+        let duration = sessionTracker.sessionDuration
+        guard duration >= 5 else { return }
+
+        let avgW = wh * 3600 / duration
+        let durationText: String
+        if duration >= 3600 {
+            durationText = String(format: "%dh %02dm", Int(duration) / 3600, (Int(duration) % 3600) / 60)
+        } else {
+            durationText = "\(max(Int(duration) / 60, 1))m"
+        }
+        let whText = wh >= 10
+            ? String(format: "%.1fWh", wh)
+            : String(format: "%.2fWh", wh)
+        sessionSummary = "\(whText) · avg \(String(format: "%.1f", avgW))W · \(durationText)"
     }
 }

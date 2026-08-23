@@ -29,6 +29,16 @@ final class PowerAggregator: PowerAggregating {
         history.removeAll()
     }
 
+    /// Merge persisted readings (from a previous run) into the buffer,
+    /// keeping the whole history sorted by timestamp.
+    func restore(_ readings: [PowerReading]) {
+        lock.lock()
+        defer { lock.unlock() }
+        history.append(contentsOf: readings)
+        history.sort { $0.timestamp < $1.timestamp }
+        pruneOldReadings()
+    }
+
     /// Get readings within a time window.
     /// - Parameter seconds: Window size. 0 = all history.
     func readings(for seconds: Int) -> [PowerReading] {

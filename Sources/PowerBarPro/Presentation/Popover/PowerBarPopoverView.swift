@@ -5,18 +5,28 @@ struct PowerBarPopoverView: View {
     @ObservedObject var powerVM: PowerDisplayViewModel
     @ObservedObject var batteryVM: BatteryViewModel
     @ObservedObject var processVM: ProcessListViewModel
+    var agentSessionsVM: AgentSessionsViewModel?
     var settingsModel: PopoverSettingsModel?
     var onQuit: (() -> Void)?
 
     var body: some View {
+        // Content grew past the popover's max height — sections scroll,
+        // the hero stays reachable at the top.
+        ScrollView(.vertical, showsIndicators: false) {
         VStack(spacing: 0) {
             // Fixed top section — always visible
-            HeroMetricView(metrics: powerVM.currentMetrics)
+            HeroMetricView(metrics: powerVM.currentMetrics, sessionSummary: powerVM.sessionSummary)
 
             SectionSeparator()
 
             MetricsGridView(metrics: powerVM.currentMetrics)
                 .padding(.vertical, Spacing.sm)
+
+            // CPU clusters & sensors — collapsible detail sections
+            CPUClustersSectionView(metrics: powerVM.currentMetrics)
+                .padding(.bottom, Spacing.xs)
+            SensorsSectionView(metrics: powerVM.currentMetrics)
+                .padding(.bottom, Spacing.sm)
 
             // Display power
             if let display = powerVM.currentMetrics?.display, display.available {
@@ -35,6 +45,13 @@ struct PowerBarPopoverView: View {
             ProcessListSectionView(processVM: processVM)
                 .padding(.vertical, Spacing.sm)
 
+            // Claude/Codex agent sessions — collapsible, snapshot on expand
+            if let sessionsVM = agentSessionsVM {
+                SectionSeparator()
+                AgentSessionsSectionView(vm: sessionsVM)
+                    .padding(.vertical, Spacing.sm)
+            }
+
             SectionSeparator()
 
             // Sparkline — compact
@@ -51,6 +68,7 @@ struct PowerBarPopoverView: View {
         }
         .padding(Spacing.md)
         .frame(width: 340)
+        }
         .background(
             ZStack {
                 Color.PB.bg
@@ -64,6 +82,7 @@ struct PowerBarPopoverView: View {
 
 struct SettingsFooterView: View {
     @ObservedObject var model: PopoverSettingsModel
+    @StateObject private var loginItem = LoginItemService()
     var onQuit: (() -> Void)?
 
     var body: some View {
@@ -117,6 +136,37 @@ struct SettingsFooterView: View {
                 options: [
                     (250, "250ms"), (500, "500ms"), (1000, "1s"), (2500, "2.5s")
                 ]
+            )
+
+            // 5. Power-hog alerts: toggle + threshold
+            SettingToggleRow(
+                label: L.powerAlerts,
+                icon: "bell.badge",
+                help: L.powerAlertsHelp,
+                isOn: $model.alertsEnabled
+            )
+
+            if model.alertsEnabled {
+                SettingPickerRow(
+                    label: L.alertThreshold,
+                    icon: "bolt.trianglebadge.exclamationmark",
+                    help: L.alertThresholdHelp,
+                    value: $model.alertThresholdW,
+                    options: [
+                        (10, "10W"), (15, "15W"), (25, "25W"), (40, "40W"), (60, "60W")
+                    ]
+                )
+            }
+
+            // 6. Launch at login
+            SettingToggleRow(
+                label: L.launchAtLogin,
+                icon: "arrow.right.circle",
+                help: L.launchAtLoginHelp,
+                isOn: Binding(
+                    get: { loginItem.isEnabled },
+                    set: { loginItem.setEnabled($0) }
+                )
             )
 
             SectionSeparator()
@@ -190,6 +240,37 @@ struct SettingPickerRow: View {
     }
 }
 
+struct SettingToggleRow: View {
+    let label: String
+    let icon: String
+    var help: String? = nil
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundColor(Color.PB.textMuted)
+                .frame(width: 14)
+
+            Text(label)
+                .font(Font.PB.caption)
+                .foregroundColor(Color.PB.textMuted)
+                .lineLimit(1)
+
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .tint(Color.PB.accent)
+        }
+        .padding(.horizontal, Spacing.md)
+        .help(help ?? label)
+    }
+}
+
 struct SettingRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: Content
@@ -221,6 +302,7 @@ struct SectionSeparator: View {
 
 struct HeroMetricView: View {
     let metrics: SystemMetrics?
+    var sessionSummary: String = ""
 
     var body: some View {
         VStack(spacing: 2) {
@@ -240,6 +322,13 @@ struct HeroMetricView: View {
                 Text("W")
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(Color.PB.textMuted)
+            }
+
+            if !sessionSummary.isEmpty {
+                Text("\(L.session): \(sessionSummary)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color.PB.textMuted)
+                    .help(L.sessionEnergyHelp)
             }
         }
         .padding(.vertical, Spacing.sm)
@@ -324,6 +413,241 @@ struct MetricCardView: View {
         .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(isHovered ? Color.PB.surfaceHover : Color.PB.surface))
         .overlay(RoundedRectangle(cornerRadius: CornerRadius.md).stroke(Color.PB.separator, lineWidth: 1))
         .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Collapsible Section Helper
+
+struct CollapsibleSection<Content: View>: View {
+    let title: String
+    let badge: String
+    @Binding var isExpanded: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            }) {
+                HStack {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.PB.textMuted)
+                        .frame(width: 10)
+
+                    Text(title)
+                        .font(Font.PB.sectionTitle)
+                        .tracking(1.5)
+                        .foregroundColor(Color.PB.textMuted)
+
+                    Spacer()
+
+                    Text(badge)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.PB.accent)
+                }
+                .padding(.horizontal, Spacing.md)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                content
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
+// MARK: - CPU Clusters Section
+
+struct CPUClustersSectionView: View {
+    let metrics: SystemMetrics?
+    @State private var isExpanded = false
+
+    private var clusters: [CPUCluster] {
+        guard let soc = metrics?.soc else { return [] }
+        var result = soc.ecpuClusters
+        if let p = soc.pcpuCluster { result.append(p) }
+        return result
+    }
+
+    var body: some View {
+        if !clusters.isEmpty {
+            CollapsibleSection(
+                title: L.cpuClusters,
+                badge: badgeText,
+                isExpanded: $isExpanded
+            ) {
+                VStack(spacing: 2) {
+                    ForEach(clusters, id: \.name) { cluster in
+                        ClusterRowView(
+                            cluster: cluster,
+                            freqMhz: freq(for: cluster),
+                            maxW: maxClusterW
+                        )
+                    }
+                    if let gpuFreq = metrics?.soc.gpuFreqMhz, let gpuW = metrics?.gpuPower {
+                        ClusterRowView(
+                            cluster: CPUCluster(name: "GPU", totalW: gpuW, cores: []),
+                            freqMhz: gpuFreq,
+                            maxW: maxClusterW
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var badgeText: String {
+        let totalCores = clusters.reduce(0) { $0 + $1.cores.count }
+        return "\(totalCores) cores"
+    }
+
+    private var maxClusterW: Double {
+        let values = clusters.map(\.totalW) + [metrics?.gpuPower ?? 0]
+        return max(values.max() ?? 1, 0.1)
+    }
+
+    /// E-clusters share ecpuFreqMhz; the P-cluster uses pcpuFreqMhz.
+    private func freq(for cluster: CPUCluster) -> Int? {
+        let isPerf = cluster.name == metrics?.soc.pcpuCluster?.name
+        return isPerf ? metrics?.soc.pcpuFreqMhz : metrics?.soc.ecpuFreqMhz
+    }
+}
+
+struct ClusterRowView: View {
+    let cluster: CPUCluster
+    let freqMhz: Int?
+    let maxW: Double
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Text(cluster.name)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(Color.PB.textPrimary)
+                .frame(width: 64, alignment: .leading)
+
+            // Relative load bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.PB.surface)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.PB.accent.opacity(0.7))
+                        .frame(width: max(2, geo.size.width * CGFloat(cluster.totalW / maxW)))
+                }
+            }
+            .frame(height: 5)
+
+            if let freq = freqMhz {
+                Text(freq >= 1000
+                     ? String(format: "%.1fGHz", Double(freq) / 1000)
+                     : "\(freq)MHz")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color.PB.textMuted)
+                    .frame(width: 52, alignment: .trailing)
+            }
+
+            Text(String(format: "%.2fW", cluster.totalW))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(Color.PB.accent)
+                .frame(width: 48, alignment: .trailing)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, 2)
+        .help(cluster.cores.isEmpty ? cluster.name : "\(cluster.name): \(cluster.cores.count) cores")
+    }
+}
+
+// MARK: - Sensors Section (temperatures + fans)
+
+struct SensorsSectionView: View {
+    let metrics: SystemMetrics?
+    @State private var isExpanded = false
+
+    /// Hottest sensor per category, hottest categories first.
+    private var groupedTemps: [(category: String, maxC: Double)] {
+        guard let temps = metrics?.temperatures, !temps.isEmpty else { return [] }
+        var byCategory: [String: Double] = [:]
+        for t in temps {
+            let cat = t.category ?? "Other"
+            byCategory[cat] = max(byCategory[cat] ?? 0, t.valueCelsius)
+        }
+        return byCategory.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+    }
+
+    private var fans: [FanMetrics] { metrics?.fans ?? [] }
+
+    var body: some View {
+        if !groupedTemps.isEmpty || !fans.isEmpty {
+            CollapsibleSection(
+                title: L.sensors,
+                badge: badgeText,
+                isExpanded: $isExpanded
+            ) {
+                VStack(spacing: 2) {
+                    ForEach(groupedTemps.prefix(6), id: \.category) { item in
+                        SensorRowView(
+                            icon: "thermometer.medium",
+                            name: item.category,
+                            value: String(format: "%.0f°C", item.maxC),
+                            valueColor: tempColor(item.maxC)
+                        )
+                    }
+                    ForEach(fans, id: \.name) { fan in
+                        SensorRowView(
+                            icon: "fan",
+                            name: fan.name,
+                            value: String(format: "%.0f rpm", fan.actualRpm),
+                            valueColor: Color.PB.textPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var badgeText: String {
+        if let hottest = groupedTemps.first {
+            return String(format: "%.0f°C", hottest.maxC)
+        }
+        return "\(fans.count)"
+    }
+
+    private func tempColor(_ celsius: Double) -> Color {
+        if celsius >= 90 { return Color.PB.error }
+        if celsius >= 75 { return Color.PB.accent }
+        return Color.PB.textPrimary
+    }
+}
+
+struct SensorRowView: View {
+    let icon: String
+    let name: String
+    let value: String
+    let valueColor: Color
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+                .foregroundColor(Color.PB.textMuted)
+                .frame(width: 14)
+
+            Text(name)
+                .font(Font.PB.caption)
+                .foregroundColor(Color.PB.textPrimary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(valueColor)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, 2)
     }
 }
 
@@ -572,6 +896,180 @@ struct ProcessRowView: View {
     private func iconResized(_ icon: NSImage) -> NSImage {
         icon.size = NSSize(width: 16, height: 16)
         return icon
+    }
+}
+
+// MARK: - Agent Sessions (Claude Code / Codex CLI)
+
+struct AgentSessionsSectionView: View {
+    @ObservedObject var vm: AgentSessionsViewModel
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                if isExpanded { vm.refresh() }
+            }) {
+                HStack {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color.PB.textMuted)
+                        .frame(width: 10)
+
+                    Text(L.agentSessions)
+                        .font(Font.PB.sectionTitle)
+                        .tracking(1.5)
+                        .foregroundColor(Color.PB.textMuted)
+
+                    Spacer()
+
+                    Text(vm.snapshot.summary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(Color.PB.accent)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, Spacing.md)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 2) {
+                    if vm.snapshot.sessions.isEmpty {
+                        Text(vm.isLoading ? L.loading : L.noAgentSessions)
+                            .font(Font.PB.caption)
+                            .foregroundColor(Color.PB.textMuted)
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.xs)
+                    } else {
+                        ForEach(AgentKind.allCases, id: \.self) { kind in
+                            let sessions = vm.snapshot.sessions(of: kind)
+                            if !sessions.isEmpty {
+                                AgentKindHeaderView(kind: kind, sessions: sessions)
+                                ForEach(sessions) { session in
+                                    AgentSessionRowView(session: session, vm: vm)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text(L.helpers(vm.snapshot.helpersMB))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(Color.PB.textMuted)
+                            Spacer()
+                            Button(action: { vm.refresh() }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color.PB.textMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .help(L.refresh)
+                        }
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.top, Spacing.xs)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
+struct AgentKindHeaderView: View {
+    let kind: AgentKind
+    let sessions: [AgentSession]
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: kind.symbolName)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(Color.PB.textMuted)
+                .frame(width: 14)
+
+            Text(kind.displayName.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(Color.PB.textMuted)
+
+            Spacer()
+
+            Text("\(sessions.count) · \(sessions.reduce(0) { $0 + $1.rssMB }) MB")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(Color.PB.textMuted)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.xs)
+    }
+}
+
+struct AgentSessionRowView: View {
+    let session: AgentSession
+    let vm: AgentSessionsViewModel
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Circle()
+                .fill(memoryColor)
+                .frame(width: 6, height: 6)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(session.displayLabel)
+                    .font(Font.PB.body)
+                    .foregroundColor(Color.PB.textPrimary)
+                    .lineLimit(1)
+                if session.name != nil {
+                    Text(session.shortPath)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            if isHovered {
+                Button(action: { vm.revealInFinder(session) }) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.PB.textMuted)
+                }
+                .buttonStyle(.plain)
+                .help(L.showInFinder)
+
+                Button(action: { vm.requestKill(session) }) {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.PB.error.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .help(L.killSessionConfirm)
+            }
+
+            Text("\(session.rssMB) MB")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(Color.PB.accent)
+                .frame(width: 58, alignment: .trailing)
+
+            Text(String(format: "%.0f%%", session.cpuPercent))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color.PB.textMuted)
+                .frame(width: 30, alignment: .trailing)
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, Spacing.md)
+        .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
+        .help("PID \(session.pid) · up \(session.uptime)\n\(session.cwd)")
+        .onHover { isHovered = $0 }
+    }
+
+    private var memoryColor: Color {
+        switch session.rssMB {
+        case ..<400: return Color.PB.success
+        case ..<900: return Color.PB.accent
+        default: return Color.PB.error
+        }
     }
 }
 
