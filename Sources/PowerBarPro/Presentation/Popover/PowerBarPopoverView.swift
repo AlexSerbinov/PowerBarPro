@@ -860,15 +860,20 @@ struct ProcessListSectionView: View {
             }
             .buttonStyle(.plain)
 
-            // Expandable process list
+            // Expandable process list — scrolls internally so the popover
+            // keeps its height while the full list stays reachable.
+            // Lazy rows: icons/LLM descriptions load only for visible ones.
             if isExpanded {
-                VStack(spacing: 0) {
-                    ForEach(processVM.attributedProcesses.prefix(12)) { proc in
-                        ProcessRowView(process: proc, onKill: {
-                            _ = processVM.terminateProcess(proc)
-                        })
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(processVM.attributedProcesses.prefix(60)) { proc in
+                            ProcessRowView(process: proc, onKill: {
+                                _ = processVM.terminateProcess(proc)
+                            })
+                        }
                     }
                 }
+                .frame(maxHeight: 300)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
