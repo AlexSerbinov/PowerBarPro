@@ -138,7 +138,17 @@ final class MenuBarManager: NSObject {
 
         let bar = ensureFanBarView(in: button)
         bar.isHidden = false
-        bar.update(fraction: fraction, color: Self.fanBarColor(fraction))
+        bar.update(fraction: fraction, color: currentBarColor(loadFraction: fraction))
+    }
+
+    /// Fill = how hard the fans work; COLOR = which mode owns them (shared
+    /// mode palette). Without the MacFans daemon the mode is unknown, so
+    /// color degrades to a load scale (green/blue/orange — never red).
+    private func currentBarColor(loadFraction: Double) -> NSColor {
+        if let reply = popoverManager?.fanControlVM.reply {
+            return MacFans.modeTint(mode: reply.mode, pct: reply.pct)
+        }
+        return Self.fanBarColor(loadFraction)
     }
 
     private func ensureFanBarView(in button: NSStatusBarButton) -> FanBarView {
@@ -176,8 +186,8 @@ final class MenuBarManager: NSObject {
     static func fanBarColor(_ fraction: Double) -> NSColor {
         switch fraction {
         case ..<0.4: return .systemGreen
-        case ..<0.7: return NSColor(red: 0.91, green: 0.64, blue: 0.29, alpha: 1)  // amber
-        default: return .systemRed
+        case ..<0.75: return .systemBlue
+        default: return .systemOrange
         }
     }
 

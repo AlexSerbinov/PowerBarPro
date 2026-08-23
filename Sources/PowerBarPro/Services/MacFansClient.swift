@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Darwin
 
 // Client for the MacFans root daemon (github: mac-fans project on this
@@ -38,6 +39,21 @@ enum MacFans {
         static let auto = Request(cmd: "set", mode: .auto)
         static let curveMode = Request(cmd: "set", mode: .curve)
         static func manual(_ pct: Int) -> Request { Request(cmd: "set", mode: .manual, pct: pct) }
+        static func setCurve(_ curve: Curve) -> Request { Request(cmd: "setCurve", curve: curve) }
+    }
+
+    /// One colour per MODE — shared by the menu bar fan line, the HUD and
+    /// the popover chips, so a glance at any of them answers "what mode am
+    /// I in". Fill/level always shows how hard the fans actually work.
+    /// Auto is the resting state: neutral gray. No red anywhere by design.
+    static func modeTint(mode: Mode, pct: Int) -> NSColor {
+        switch mode {
+        case .auto: return .secondaryLabelColor
+        case .curve: return .systemPurple
+        case .manual:
+            if pct >= 85 { return .systemOrange }
+            return pct >= 50 ? .systemBlue : .systemGreen
+        }
     }
 
     struct FanReport: Codable {

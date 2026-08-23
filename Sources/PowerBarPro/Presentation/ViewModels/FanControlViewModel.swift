@@ -43,6 +43,7 @@ final class FanControlViewModel: ObservableObject {
     func setAuto() { perform(.auto) }
     func setCurve() { perform(.curveMode) }
     func setManual(_ pct: Int) { perform(.manual(pct)) }
+    func setCurve(_ curve: MacFans.Curve) { perform(.setCurve(curve)) }
 
     // MARK: - Private
 

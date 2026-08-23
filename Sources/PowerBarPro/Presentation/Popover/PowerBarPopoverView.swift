@@ -1040,7 +1040,7 @@ struct FanControlSectionView: View {
     @ObservedObject var vm: FanControlViewModel
     @State private var isExpanded = false
 
-    private static let fixedPresets = [30, 50, 70, 85, 100]
+    private static let fixedPresets = [0, 30, 70, 100]
     private let fanColor = Color.PB.info
 
     var body: some View {
@@ -1064,7 +1064,7 @@ struct FanControlSectionView: View {
 
                     Text(badgeText)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(fanColor)
+                        .foregroundColor(badgeColor)
                         .lineLimit(1)
                 }
                 .padding(.horizontal, Spacing.md)
@@ -1073,54 +1073,52 @@ struct FanControlSectionView: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    modeRow(
-                        title: "Automatic",
-                        subtitle: "macOS curve",
-                        isActive: vm.reply?.mode == .auto,
-                        help: L.fanAutoHelp,
-                        action: { vm.setAuto() }
-                    )
-
-                    modeRow(
-                        title: "Battery Curve",
-                        subtitle: curveSubtitle,
-                        isActive: vm.reply?.mode == .curve,
-                        help: L.fanCurveHelp,
-                        action: { vm.setCurve() }
-                    )
-
-                    Text(L.fixedSpeed)
-                        .font(.system(size: 9, weight: .semibold))
-                        .tracking(1)
-                        .foregroundColor(Color.PB.textMuted)
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.top, Spacing.xs)
-
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    // One chip row: two modes on the left, fixed speeds after.
+                    // Each chip lights up in its own mode color when active.
                     HStack(spacing: Spacing.xs) {
+                        chip(
+                            label: "Auto",
+                            color: Color(nsColor: MacFans.modeTint(mode: .auto, pct: 0)),
+                            isActive: vm.reply?.mode == .auto,
+                            help: L.fanAutoHelp
+                        ) { vm.setAuto() }
+
+                        chip(
+                            label: "Curve",
+                            color: Color(nsColor: MacFans.modeTint(mode: .curve, pct: 0)),
+                            isActive: vm.reply?.mode == .curve,
+                            help: L.fanCurveHelp
+                        ) { vm.setCurve() }
+
                         ForEach(Self.fixedPresets, id: \.self) { pct in
-                            Button(action: { vm.setManual(pct) }) {
-                                Text("\(pct)")
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .fontWeight(isFixedActive(pct) ? .bold : .regular)
-                                    .foregroundColor(isFixedActive(pct) ? Color.PB.bg : Color.PB.textPrimary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: CornerRadius.sm)
-                                            .fill(isFixedActive(pct) ? fanColor : Color.PB.surface)
-                                    )
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
+                            chip(
+                                label: "\(pct)",
+                                color: Color(nsColor: MacFans.modeTint(mode: .manual, pct: pct)),
+                                isActive: isFixedActive(pct),
+                                help: L.fanFixedHelp
+                            ) { vm.setManual(pct) }
                         }
                     }
                     .padding(.horizontal, Spacing.md)
-                    .help(L.fanFixedHelp)
+
+                    // Battery curve bounds, editable in place
+                    if let curve = vm.reply?.curve {
+                        CurveEditorRow(curve: curve, accent: curveColor) { vm.setCurve($0) }
+                    }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private var curveColor: Color { Color(nsColor: MacFans.modeTint(mode: .curve, pct: 0)) }
+
+    /// Badge takes the active mode's color; neutral info-blue before the
+    /// first status arrives.
+    private var badgeColor: Color {
+        guard let reply = vm.reply else { return fanColor }
+        return Color(nsColor: MacFans.modeTint(mode: reply.mode, pct: reply.pct))
     }
 
     private var badgeText: String {
@@ -1130,46 +1128,102 @@ struct FanControlSectionView: View {
         return "\(reply.modeTitle) · \(reply.rpmText) rpm"
     }
 
-    private var curveSubtitle: String {
-        guard let curve = vm.reply?.curve else { return "battery temp" }
-        return String(format: "%.0f→%.0f °C", curve.lowTemp, curve.highTemp)
-    }
-
     private func isFixedActive(_ pct: Int) -> Bool {
         vm.reply?.mode == .manual && vm.reply?.pct == pct
     }
 
-    private func modeRow(
-        title: String,
-        subtitle: String,
+    private func chip(
+        label: String,
+        color: Color,
         isActive: Bool,
         help: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(fanColor)
-                    .frame(width: 12)
-                    .opacity(isActive ? 1 : 0)
-
-                Text(title)
-                    .font(Font.PB.body)
-                    .foregroundColor(isActive ? Color.PB.textPrimary : Color.PB.textMuted)
-
-                Text(subtitle)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color.PB.textMuted)
-
-                Spacer()
-            }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, 3)
-            .contentShape(Rectangle())
+            Text(label)
+                .font(.system(size: 11, design: .monospaced))
+                .fontWeight(isActive ? .bold : .regular)
+                .foregroundColor(isActive ? Color.PB.bg : Color.PB.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: CornerRadius.sm)
+                        .fill(isActive ? color : Color.PB.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.sm)
+                        .stroke(isActive ? Color.clear : color.opacity(0.35), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// Inline battery-curve editor: low temp → low %, high temp → high %.
+/// Every change applies live through the daemon (and switches to curve mode
+/// on the daemon side only if it is already the active mode — setCurve
+/// itself just stores the bounds).
+struct CurveEditorRow: View {
+    let curve: MacFans.Curve
+    let accent: Color
+    let onChange: (MacFans.Curve) -> Void
+
+    private let temps = Array(30...45)
+    private let pcts = Array(stride(from: 0, through: 100, by: 10))
+
+    var body: some View {
+        HStack(spacing: Spacing.xs) {
+            Text("CURVE")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(Color.PB.textMuted)
+
+            picker(Int(curve.lowTemp), options: temps, suffix: "°") { newTemp in
+                var c = curve; c.lowTemp = Double(newTemp); onChange(c)
+            }
+            picker(curve.lowPct, options: pcts, suffix: "%") { newPct in
+                var c = curve; c.lowPct = newPct; onChange(c)
+            }
+
+            Image(systemName: "arrow.right")
+                .font(.system(size: 8))
+                .foregroundColor(Color.PB.textMuted)
+
+            picker(Int(curve.highTemp), options: temps, suffix: "°") { newTemp in
+                var c = curve; c.highTemp = Double(newTemp); onChange(c)
+            }
+            picker(curve.highPct, options: pcts, suffix: "%") { newPct in
+                var c = curve; c.highPct = newPct; onChange(c)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.md)
+        .help(L.fanCurveHelp)
+    }
+
+    private func picker(
+        _ value: Int,
+        options: [Int],
+        suffix: String,
+        onSelect: @escaping (Int) -> Void
+    ) -> some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button("\(option)\(suffix)") { onSelect(option) }
+            }
+        } label: {
+            Text("\(value)\(suffix)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(accent)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(Color.PB.surface))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 }
 

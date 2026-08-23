@@ -48,15 +48,9 @@ extension MacFans.Reply {
         return Swift.max(0, Swift.min(1, Double(fan.rpm - fan.min) / span))
     }
 
-    /// One colour per mode; automatic is the resting state — plain secondary.
+    /// One colour per mode — the shared mode palette (see MacFans.modeTint).
     var hudTint: Color {
-        switch mode {
-        case .auto: return .secondary
-        case .curve: return Color(nsColor: .systemBlue)
-        case .manual:
-            if pct >= 100 { return Color(nsColor: .systemRed) }
-            return pct >= 60 ? Color(nsColor: .systemOrange) : Color(nsColor: .systemYellow)
-        }
+        Color(nsColor: MacFans.modeTint(mode: mode, pct: pct))
     }
 
     var hudSymbol: String {

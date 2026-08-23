@@ -252,9 +252,16 @@ final class FanLoadFractionTests: XCTestCase {
 
     func testBarColorBands() {
         XCTAssertEqual(MenuBarManager.fanBarColor(0.2), .systemGreen)
-        XCTAssertEqual(MenuBarManager.fanBarColor(0.9), .systemRed)
-        XCTAssertNotEqual(MenuBarManager.fanBarColor(0.5), .systemGreen)
-        XCTAssertNotEqual(MenuBarManager.fanBarColor(0.5), .systemRed)
+        XCTAssertEqual(MenuBarManager.fanBarColor(0.5), .systemBlue)
+        XCTAssertEqual(MenuBarManager.fanBarColor(0.9), .systemOrange)
+    }
+
+    func testModeTintPalette() {
+        XCTAssertEqual(MacFans.modeTint(mode: .auto, pct: 0), .secondaryLabelColor)
+        XCTAssertEqual(MacFans.modeTint(mode: .curve, pct: 60), .systemPurple)
+        XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 30), .systemGreen)
+        XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 70), .systemBlue)
+        XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 100), .systemOrange)
     }
 }
 
