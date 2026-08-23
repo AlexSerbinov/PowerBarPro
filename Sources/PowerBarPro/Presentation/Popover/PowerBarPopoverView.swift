@@ -153,6 +153,14 @@ struct BatteryChipView: View {
         HStack(spacing: Spacing.sm) {
             BatteryIconView(percent: batteryVM.percent / 100, isCharging: batteryVM.isCharging)
 
+            // Bolt marks AC power; the estimate stays visible either way
+            // ("how long would it last at this draw")
+            if !batteryVM.isOnBattery {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color.PB.accent)
+            }
+
             VStack(alignment: .trailing, spacing: 0) {
                 Text(String(format: "%.0f%%", batteryVM.percent))
                     .font(.system(size: 12, design: .monospaced))

@@ -137,10 +137,13 @@ final class SystemBatteryServiceTests: XCTestCase {
         XCTAssertEqual(time!, 14400, accuracy: 1.0) // 60/15 * 3600
     }
 
-    func testCalculateRemainingTime_onExternal_returnsNil() {
+    func testCalculateRemainingTime_onExternal_stillEstimates() {
+        // On AC the estimate stays available ("how long would it last at
+        // this draw") — the UI marks plugged-in state with a bolt instead.
         let battery = TestData.batteryCharging()
         let time = service.calculateRemainingTime(battery: battery, averagePowerW: 15.0)
-        XCTAssertNil(time)
+        XCTAssertNotNil(time)
+        XCTAssertGreaterThan(time ?? 0, 0)
     }
 
     func testCalculateRemainingTime_lowPower_returnsNil() {

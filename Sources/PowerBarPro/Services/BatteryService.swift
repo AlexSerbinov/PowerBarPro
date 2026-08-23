@@ -26,8 +26,10 @@ final class SystemBatteryService: BatteryMonitoring {
         return parseBatteryData(data)
     }
 
+    /// "How long would the battery last at the current draw" — computed on
+    /// AC too (the UI marks plugged-in state with a bolt instead of hiding
+    /// the estimate).
     func calculateRemainingTime(battery: BatteryState, averagePowerW: Double) -> TimeInterval? {
-        guard battery.isOnBatteryPower else { return nil }
         guard averagePowerW > Constants.Battery.minimumReliablePowerW else { return nil }
 
         let hours = battery.remainingEnergyWh / averagePowerW
