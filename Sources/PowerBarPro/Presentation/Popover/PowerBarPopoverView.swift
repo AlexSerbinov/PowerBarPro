@@ -1,6 +1,19 @@
 import SwiftUI
 
-/// Main popover view — drops down from the menu bar icon.
+/// Reports the popover content's natural height up to the manager,
+/// which resizes the NSPopover to fit (capped to the screen).
+struct PopoverContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Main popover view — a compact, glanceable menu bar tool.
+///
+/// Layout follows menu-bar-utility canons (HIG / iStat-class apps):
+/// everything important in one screen without scrolling, details behind
+/// progressive disclosure, settings on a separate page behind the gear.
 struct PowerBarPopoverView: View {
     @ObservedObject var powerVM: PowerDisplayViewModel
     @ObservedObject var batteryVM: BatteryViewModel
@@ -8,73 +21,355 @@ struct PowerBarPopoverView: View {
     var agentSessionsVM: AgentSessionsViewModel?
     var settingsModel: PopoverSettingsModel?
     var onQuit: (() -> Void)?
+    var onHeightChange: ((CGFloat) -> Void)?
+
+    private enum Page { case main, settings }
+    @State private var page: Page = .main
 
     var body: some View {
-        // Content grew past the popover's max height — sections scroll,
-        // the hero stays reachable at the top.
+        // ScrollView is a safety net for expanded sections on small screens;
+        // the default state fits without scrolling.
         ScrollView(.vertical, showsIndicators: false) {
-        VStack(spacing: 0) {
-            // Fixed top section — always visible
-            HeroMetricView(metrics: powerVM.currentMetrics, sessionSummary: powerVM.sessionSummary)
-
-            SectionSeparator()
-
-            MetricsGridView(metrics: powerVM.currentMetrics)
-                .padding(.vertical, Spacing.sm)
-
-            // CPU clusters & sensors — collapsible detail sections
-            CPUClustersSectionView(metrics: powerVM.currentMetrics)
-                .padding(.bottom, Spacing.xs)
-            SensorsSectionView(metrics: powerVM.currentMetrics)
-                .padding(.bottom, Spacing.sm)
-
-            // Display power
-            if let display = powerVM.currentMetrics?.display, display.available {
-                DisplayPowerRow(
-                    watts: processVM.displayPowerW,
-                    brightness: display.brightnessPct
-                )
-                .padding(.bottom, Spacing.sm)
+            Group {
+                if page == .settings, let model = settingsModel {
+                    SettingsPageView(model: model, onQuit: onQuit) {
+                        withAnimation(.easeInOut(duration: 0.15)) { page = .main }
+                    }
+                } else {
+                    mainPage
+                }
             }
-
-            BatteryBarView(batteryVM: batteryVM)
-                .padding(.bottom, Spacing.sm)
-
-            // Process list — collapsible
-            SectionSeparator()
-            ProcessListSectionView(processVM: processVM)
-                .padding(.vertical, Spacing.sm)
-
-            // Claude/Codex agent sessions — collapsible, snapshot on expand
-            if let sessionsVM = agentSessionsVM {
-                SectionSeparator()
-                AgentSessionsSectionView(vm: sessionsVM)
-                    .padding(.vertical, Spacing.sm)
-            }
-
-            SectionSeparator()
-
-            // Sparkline — compact
-            SparklineChartView(powerVM: powerVM)
-                .padding(.vertical, Spacing.xs)
-
-            SectionSeparator()
-
-            // Settings — compact
-            if let model = settingsModel {
-                SettingsFooterView(model: model, onQuit: onQuit)
-                    .padding(.vertical, Spacing.xs)
-            }
+            .padding(Spacing.md)
+            .frame(width: 320)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: PopoverContentHeightKey.self, value: geo.size.height)
+                }
+            )
         }
-        .padding(Spacing.md)
-        .frame(width: 340)
-        }
+        .onPreferenceChange(PopoverContentHeightKey.self) { onHeightChange?($0) }
         .background(
             ZStack {
                 Color.PB.bg
                 Color.white.opacity(0.015)
             }
         )
+    }
+
+    var mainPage: some View {
+        VStack(spacing: 0) {
+            // 1. Glanceable header: total watts + battery chip
+            HeaderRowView(metrics: powerVM.currentMetrics, batteryVM: batteryVM)
+                .padding(.bottom, Spacing.sm)
+
+            // 2. Component strip: CPU / GPU / PKG / RAM in one row
+            MetricStripView(metrics: powerVM.currentMetrics)
+                .padding(.bottom, Spacing.sm)
+
+            // 3. One-line ambient status: display + hottest temp
+            StatusLineView(
+                metrics: powerVM.currentMetrics,
+                displayW: processVM.displayPowerW
+            )
+            .padding(.bottom, Spacing.sm)
+
+            SectionSeparator()
+
+            // 4. History chart with period picker
+            SparklineChartView(powerVM: powerVM)
+                .padding(.vertical, Spacing.sm)
+
+            SectionSeparator()
+
+            // 5. Progressive disclosure: details, processes, agent sessions
+            VStack(spacing: Spacing.sm) {
+                DetailsSectionView(metrics: powerVM.currentMetrics)
+                ProcessListSectionView(processVM: processVM)
+                if let sessionsVM = agentSessionsVM {
+                    AgentSessionsSectionView(vm: sessionsVM)
+                }
+            }
+            .padding(.vertical, Spacing.sm)
+
+            SectionSeparator()
+
+            // 6. Footer: session energy + gear + quit
+            FooterRowView(
+                sessionSummary: powerVM.sessionSummary,
+                onSettings: { withAnimation(.easeInOut(duration: 0.15)) { page = .settings } },
+                onQuit: onQuit
+            )
+            .padding(.top, Spacing.sm)
+        }
+    }
+}
+
+// MARK: - Header (total power + battery chip)
+
+struct HeaderRowView: View {
+    let metrics: SystemMetrics?
+    @ObservedObject var batteryVM: BatteryViewModel
+
+    var body: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(heroValue)
+                        .font(.system(size: 26, design: .monospaced))
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.PB.accent)
+                    Text("W")
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                }
+                Text("TOTAL POWER")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(Color.PB.textMuted)
+            }
+
+            Spacer()
+
+            if batteryVM.isVisible {
+                BatteryChipView(batteryVM: batteryVM)
+            }
+        }
+    }
+
+    private var heroValue: String {
+        guard let m = metrics else { return "--.-" }
+        return String(format: "%.1f", m.sysPower)
+    }
+}
+
+struct BatteryChipView: View {
+    @ObservedObject var batteryVM: BatteryViewModel
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            BatteryIconView(percent: batteryVM.percent / 100, isCharging: batteryVM.isCharging)
+
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(String(format: "%.0f%%", batteryVM.percent))
+                    .font(.system(size: 12, design: .monospaced))
+                    .fontWeight(.semibold)
+                    .foregroundColor(percentColor)
+
+                if !batteryVM.timeRemainingText.isEmpty {
+                    Text(batteryVM.timeRemainingText)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                } else {
+                    Text(statusText)
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.PB.textMuted)
+                }
+            }
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.PB.surface))
+        .help(batteryHelp)
+    }
+
+    private var statusText: String {
+        if batteryVM.isCharging { return "Charging" }
+        if batteryVM.isOnBattery { return "On Battery" }
+        return "Plugged In"
+    }
+
+    private var percentColor: Color {
+        if batteryVM.percent < 20 { return Color.PB.error }
+        if batteryVM.isCharging { return Color.PB.success }
+        return Color.PB.textPrimary
+    }
+
+    private var batteryHelp: String {
+        var parts = [statusText]
+        if !batteryVM.timeRemainingText.isEmpty {
+            parts.append("\(batteryVM.timeRemainingText) \(L.remaining)")
+        }
+        parts.append(L.timeRemainingHelp)
+        return parts.joined(separator: "\n")
+    }
+}
+
+// MARK: - Metric Strip (CPU / GPU / PKG / RAM)
+
+struct MetricStripView: View {
+    let metrics: SystemMetrics?
+
+    var body: some View {
+        HStack(spacing: 1) {
+            cell("CPU", value: metrics?.cpuPower, help: cpuHelp, accent: true)
+            divider
+            cell("GPU", value: metrics?.gpuPower, help: gpuHelp, accent: true)
+            divider
+            cell("PKG", value: metrics?.allPower, help: pkgHelp)
+            divider
+            cell("RAM", value: metrics?.ramPower, help: ramHelp)
+        }
+        .padding(.vertical, Spacing.sm)
+        .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.PB.surface))
+        .overlay(RoundedRectangle(cornerRadius: CornerRadius.md).stroke(Color.PB.separator, lineWidth: 1))
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.PB.separator)
+            .frame(width: 1, height: 22)
+    }
+
+    private func cell(_ name: String, value: Double?, help: String, accent: Bool = false) -> some View {
+        VStack(spacing: 1) {
+            Text(name)
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.5)
+                .foregroundColor(Color.PB.textMuted)
+            Text(value.map { String(format: "%.1fW", $0) } ?? "--.-")
+                .font(.system(size: 13, design: .monospaced))
+                .fontWeight(.semibold)
+                .foregroundColor(accent ? Color.PB.accent : Color.PB.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+        .help(help)
+    }
+
+    private var cpuHelp: String {
+        guard let m = metrics else { return "CPU" }
+        return String(format: "CPU %.2fW · Fabric %.2fW", m.cpuPower, m.soc.fabricW)
+    }
+    private var gpuHelp: String {
+        guard let m = metrics else { return "GPU" }
+        let cores = m.gpuCores.map { " · \($0) cores" } ?? ""
+        return String(format: "GPU %.2fW%@", m.gpuPower, cores)
+    }
+    private var pkgHelp: String {
+        guard let m = metrics else { return "Package" }
+        return String(format: "Package %.2fW · ANE %.3fW", m.allPower, m.anePower)
+    }
+    private var ramHelp: String {
+        guard let m = metrics else { return "DRAM" }
+        let size = m.dramGb.map { " · \($0) GB unified" } ?? ""
+        return String(format: "DRAM %.2fW%@", m.ramPower, size)
+    }
+}
+
+// MARK: - Status Line (display + hottest temp, one row)
+
+struct StatusLineView: View {
+    let metrics: SystemMetrics?
+    let displayW: Double
+
+    var body: some View {
+        if hasContent {
+            HStack(spacing: Spacing.sm) {
+                if let display = metrics?.display, display.available {
+                    Image(systemName: "display")
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.PB.textMuted)
+                    Text(String(format: "%.1fW · %.0f%%", displayW, display.brightnessPct))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(Color.PB.textMuted)
+                        .help("\(L.display): \(String(format: "%.2fW", displayW)) · \(L.brightness) \(String(format: "%.0f%%", display.brightnessPct))")
+                }
+
+                Spacer()
+
+                if let temp = hottestTemp {
+                    Image(systemName: "thermometer.medium")
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.PB.textMuted)
+                    Text(String(format: "%.0f°C", temp.1))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(tempColor(temp.1))
+                        .help("\(temp.0): \(String(format: "%.0f°C", temp.1))")
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private var hasContent: Bool {
+        (metrics?.display?.available ?? false) || hottestTemp != nil
+    }
+
+    private var hottestTemp: (String, Double)? {
+        guard let temps = metrics?.temperatures, !temps.isEmpty else { return nil }
+        let hottest = temps.max { $0.valueCelsius < $1.valueCelsius }
+        return hottest.map { ($0.category ?? $0.key, $0.valueCelsius) }
+    }
+
+    private func tempColor(_ celsius: Double) -> Color {
+        if celsius >= 90 { return Color.PB.error }
+        if celsius >= 75 { return Color.PB.accent }
+        return Color.PB.textMuted
+    }
+}
+
+// MARK: - Footer (session energy + gear + quit)
+
+struct FooterRowView: View {
+    let sessionSummary: String
+    var onSettings: () -> Void
+    var onQuit: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            if !sessionSummary.isEmpty {
+                Text(sessionSummary)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(Color.PB.textMuted)
+                    .lineLimit(1)
+                    .help(L.sessionEnergyHelp)
+            }
+
+            Spacer()
+
+            Button(action: onSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.PB.textMuted)
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+
+            Button(action: { onQuit?() }) {
+                Image(systemName: "power")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.PB.textMuted)
+            }
+            .buttonStyle(.plain)
+            .help(L.quit)
+        }
+    }
+}
+
+// MARK: - Settings Page
+
+struct SettingsPageView: View {
+    @ObservedObject var model: PopoverSettingsModel
+    var onQuit: (() -> Void)?
+    var onBack: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onBack) {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("SETTINGS")
+                        .font(Font.PB.sectionTitle)
+                        .tracking(1.5)
+                }
+                .foregroundColor(Color.PB.textMuted)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, Spacing.sm)
+
+            SettingsFooterView(model: model, onQuit: onQuit)
+        }
     }
 }
 
@@ -87,12 +382,6 @@ struct SettingsFooterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("SETTINGS")
-                .font(Font.PB.sectionTitle)
-                .tracking(1.5)
-                .foregroundColor(Color.PB.textMuted)
-                .padding(.horizontal, Spacing.md)
-
             // 1. Power Averaging Period
             SettingPickerRow(
                 label: L.averagingPeriod,
@@ -298,123 +587,8 @@ struct SectionSeparator: View {
     }
 }
 
-// MARK: - Hero Metric
-
-struct HeroMetricView: View {
-    let metrics: SystemMetrics?
-    var sessionSummary: String = ""
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text("TOTAL POWER")
-                .font(Font.PB.sectionTitle)
-                .tracking(1.5)
-                .foregroundColor(Color.PB.textMuted)
-
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                // Monospaced digits update in place — no morphing transition,
-                // it reads as constant flicker at 1s refresh.
-                Text(heroValue)
-                    .font(.system(size: 36, design: .monospaced))
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color.PB.accent)
-
-                Text("W")
-                    .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(Color.PB.textMuted)
-            }
-
-            if !sessionSummary.isEmpty {
-                Text("\(L.session): \(sessionSummary)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color.PB.textMuted)
-                    .help(L.sessionEnergyHelp)
-            }
-        }
-        .padding(.vertical, Spacing.sm)
-    }
-
-    private var heroValue: String {
-        guard let m = metrics else { return "--.-" }
-        return String(format: "%.1f", m.sysPower)
-    }
-}
-
-// MARK: - Metrics Grid (2x2)
-
-struct MetricsGridView: View {
-    let metrics: SystemMetrics?
-
-    var body: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: Spacing.sm),
-            GridItem(.flexible(), spacing: Spacing.sm)
-        ], spacing: Spacing.sm) {
-            MetricCardView(name: "CPU", value: format(metrics?.cpuPower), sub: cpuSub, isAccent: true)
-            MetricCardView(name: "GPU", value: format(metrics?.gpuPower), sub: gpuSub, isAccent: true)
-            MetricCardView(name: "Package", value: format(metrics?.allPower), sub: aneSub)
-            MetricCardView(name: "DRAM", value: format(metrics?.ramPower), sub: dramSub)
-        }
-    }
-
-    private func format(_ w: Double?) -> String {
-        guard let w = w else { return "--.-W" }
-        return String(format: "%.1fW", w)
-    }
-
-    private var cpuSub: String {
-        guard let m = metrics else { return "" }
-        let fabric = m.soc.fabricW
-        return fabric > 0.01 ? "Fabric: \(String(format: "%.2fW", fabric))" : ""
-    }
-
-    private var gpuSub: String {
-        guard let cores = metrics?.gpuCores else { return "" }
-        return "\(cores) cores"
-    }
-
-    private var aneSub: String {
-        guard let m = metrics else { return "" }
-        return "ANE: \(String(format: "%.3fW", m.anePower))"
-    }
-
-    private var dramSub: String {
-        guard let gb = metrics?.dramGb else { return "" }
-        return "\(gb) GB unified"
-    }
-}
-
-struct MetricCardView: View {
-    let name: String
-    let value: String
-    let sub: String
-    var isAccent: Bool = false
-    @State private var isHovered = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(name)
-                .font(Font.PB.caption)
-                .foregroundColor(Color.PB.textMuted)
-
-            Text(value)
-                .font(Font.PB.metricValue)
-                .foregroundColor(isAccent ? Color.PB.accent : Color.PB.textPrimary)
-
-            if !sub.isEmpty {
-                Text(sub)
-                    .font(Font.PB.metricSub)
-                    .foregroundColor(Color.PB.textMuted)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, Spacing.sm)
-        .padding(.horizontal, Spacing.md)
-        .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(isHovered ? Color.PB.surfaceHover : Color.PB.surface))
-        .overlay(RoundedRectangle(cornerRadius: CornerRadius.md).stroke(Color.PB.separator, lineWidth: 1))
-        .onHover { isHovered = $0 }
-    }
-}
+// (Hero and 2x2 metric cards replaced by HeaderRowView + MetricStripView
+//  in the compact redesign — see design-v1 tag for the previous layout.)
 
 // MARK: - Collapsible Section Helper
 
@@ -459,9 +633,9 @@ struct CollapsibleSection<Content: View>: View {
     }
 }
 
-// MARK: - CPU Clusters Section
+// MARK: - Details Section (CPU clusters + sensors + fans, one disclosure)
 
-struct CPUClustersSectionView: View {
+struct DetailsSectionView: View {
     let metrics: SystemMetrics?
     @State private var isExpanded = false
 
@@ -472,10 +646,23 @@ struct CPUClustersSectionView: View {
         return result
     }
 
+    /// Hottest sensor per category, hottest categories first.
+    private var groupedTemps: [(category: String, maxC: Double)] {
+        guard let temps = metrics?.temperatures, !temps.isEmpty else { return [] }
+        var byCategory: [String: Double] = [:]
+        for t in temps {
+            let cat = t.category ?? "Other"
+            byCategory[cat] = max(byCategory[cat] ?? 0, t.valueCelsius)
+        }
+        return byCategory.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+    }
+
+    private var fans: [FanMetrics] { metrics?.fans ?? [] }
+
     var body: some View {
-        if !clusters.isEmpty {
+        if !clusters.isEmpty || !groupedTemps.isEmpty || !fans.isEmpty {
             CollapsibleSection(
-                title: L.cpuClusters,
+                title: L.details,
                 badge: badgeText,
                 isExpanded: $isExpanded
             ) {
@@ -494,14 +681,36 @@ struct CPUClustersSectionView: View {
                             maxW: maxClusterW
                         )
                     }
+
+                    ForEach(groupedTemps.prefix(6), id: \.category) { item in
+                        SensorRowView(
+                            icon: "thermometer.medium",
+                            name: item.category,
+                            value: String(format: "%.0f°C", item.maxC),
+                            valueColor: tempColor(item.maxC)
+                        )
+                    }
+                    ForEach(fans, id: \.name) { fan in
+                        SensorRowView(
+                            icon: "fan",
+                            name: fan.name,
+                            value: String(format: "%.0f rpm", fan.actualRpm),
+                            valueColor: Color.PB.textPrimary
+                        )
+                    }
                 }
             }
         }
     }
 
     private var badgeText: String {
+        var parts: [String] = []
         let totalCores = clusters.reduce(0) { $0 + $1.cores.count }
-        return "\(totalCores) cores"
+        if totalCores > 0 { parts.append("\(totalCores) cores") }
+        if let hottest = groupedTemps.first {
+            parts.append(String(format: "%.0f°C", hottest.maxC))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var maxClusterW: Double {
@@ -513,6 +722,12 @@ struct CPUClustersSectionView: View {
     private func freq(for cluster: CPUCluster) -> Int? {
         let isPerf = cluster.name == metrics?.soc.pcpuCluster?.name
         return isPerf ? metrics?.soc.pcpuFreqMhz : metrics?.soc.ecpuFreqMhz
+    }
+
+    private func tempColor(_ celsius: Double) -> Color {
+        if celsius >= 90 { return Color.PB.error }
+        if celsius >= 75 { return Color.PB.accent }
+        return Color.PB.textPrimary
     }
 }
 
@@ -560,68 +775,6 @@ struct ClusterRowView: View {
     }
 }
 
-// MARK: - Sensors Section (temperatures + fans)
-
-struct SensorsSectionView: View {
-    let metrics: SystemMetrics?
-    @State private var isExpanded = false
-
-    /// Hottest sensor per category, hottest categories first.
-    private var groupedTemps: [(category: String, maxC: Double)] {
-        guard let temps = metrics?.temperatures, !temps.isEmpty else { return [] }
-        var byCategory: [String: Double] = [:]
-        for t in temps {
-            let cat = t.category ?? "Other"
-            byCategory[cat] = max(byCategory[cat] ?? 0, t.valueCelsius)
-        }
-        return byCategory.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
-    }
-
-    private var fans: [FanMetrics] { metrics?.fans ?? [] }
-
-    var body: some View {
-        if !groupedTemps.isEmpty || !fans.isEmpty {
-            CollapsibleSection(
-                title: L.sensors,
-                badge: badgeText,
-                isExpanded: $isExpanded
-            ) {
-                VStack(spacing: 2) {
-                    ForEach(groupedTemps.prefix(6), id: \.category) { item in
-                        SensorRowView(
-                            icon: "thermometer.medium",
-                            name: item.category,
-                            value: String(format: "%.0f°C", item.maxC),
-                            valueColor: tempColor(item.maxC)
-                        )
-                    }
-                    ForEach(fans, id: \.name) { fan in
-                        SensorRowView(
-                            icon: "fan",
-                            name: fan.name,
-                            value: String(format: "%.0f rpm", fan.actualRpm),
-                            valueColor: Color.PB.textPrimary
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private var badgeText: String {
-        if let hottest = groupedTemps.first {
-            return String(format: "%.0f°C", hottest.maxC)
-        }
-        return "\(fans.count)"
-    }
-
-    private func tempColor(_ celsius: Double) -> Color {
-        if celsius >= 90 { return Color.PB.error }
-        if celsius >= 75 { return Color.PB.accent }
-        return Color.PB.textPrimary
-    }
-}
-
 struct SensorRowView: View {
     let icon: String
     let name: String
@@ -651,96 +804,7 @@ struct SensorRowView: View {
     }
 }
 
-// MARK: - Display Power Row
-
-struct DisplayPowerRow: View {
-    let watts: Double
-    let brightness: Double
-
-    var body: some View {
-        HStack {
-            Image(systemName: "display")
-                .foregroundColor(Color.PB.textMuted)
-                .font(.system(size: 14))
-
-            Text("Display")
-                .font(Font.PB.body)
-                .foregroundColor(Color.PB.textPrimary)
-
-            Spacer()
-
-            Text(String(format: "%.1fW", watts))
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(Color.PB.accent)
-
-            Text(String(format: "%.0f%%", brightness))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Color.PB.textMuted)
-                .frame(width: 36, alignment: .trailing)
-        }
-        .padding(.vertical, Spacing.xs)
-        .padding(.horizontal, Spacing.md)
-    }
-}
-
-// MARK: - Battery Bar
-
-struct BatteryBarView: View {
-    @ObservedObject var batteryVM: BatteryViewModel
-
-    var body: some View {
-        if batteryVM.isVisible {
-            HStack(spacing: Spacing.md) {
-                BatteryIconView(percent: batteryVM.percent / 100, isCharging: batteryVM.isCharging)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(String(format: "%.0f%%", batteryVM.percent))
-                        .font(.system(size: 16, design: .monospaced))
-                        .fontWeight(.semibold)
-                        .foregroundColor(batteryColor)
-
-                    Text(statusText)
-                        .font(Font.PB.caption)
-                        .foregroundColor(Color.PB.textMuted)
-                }
-
-                Spacer()
-
-                if !batteryVM.timeRemainingText.isEmpty {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text(batteryVM.timeRemainingText)
-                            .font(.system(size: 15, design: .monospaced))
-                            .fontWeight(.semibold)
-                            .foregroundColor(Color.PB.accent)
-
-                        // Estimate is always discharge time at current draw
-                        // (see BatteryService.calculateRemainingTime)
-                        Text(L.remaining)
-                            .font(Font.PB.caption)
-                            .foregroundColor(Color.PB.textMuted)
-                    }
-                    .help(L.timeRemainingHelp)
-                }
-            }
-            .padding(.vertical, Spacing.sm)
-            .padding(.horizontal, Spacing.md)
-            .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.PB.surface))
-            .overlay(RoundedRectangle(cornerRadius: CornerRadius.md).stroke(Color.PB.separator, lineWidth: 1))
-        }
-    }
-
-    private var statusText: String {
-        if batteryVM.isCharging { return "Charging" }
-        if batteryVM.isOnBattery { return "On Battery" }
-        return "Plugged In"
-    }
-
-    private var batteryColor: Color {
-        if batteryVM.percent < 20 { return Color.PB.error }
-        if batteryVM.isCharging { return Color.PB.success }
-        return Color.PB.textPrimary
-    }
-}
+// MARK: - Battery Icon
 
 struct BatteryIconView: View {
     let percent: Double

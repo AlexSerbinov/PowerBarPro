@@ -57,7 +57,13 @@ final class PopoverSnapshotTests: XCTestCase {
             onQuit: nil
         )
 
-        let renderer = ImageRenderer(content: view.frame(width: 340))
+        // Render the content directly: ImageRenderer can't lay out the
+        // NSScrollView-backed ScrollView wrapper offscreen
+        let renderable = view.mainPage
+            .padding(16)
+            .frame(width: 320)
+            .background(Color(.sRGB, red: 0.11, green: 0.106, blue: 0.122, opacity: 1))
+        let renderer = ImageRenderer(content: renderable)
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.nsImage, "popover failed to render offscreen")
         XCTAssertGreaterThan(image.size.width, 0)

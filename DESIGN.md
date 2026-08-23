@@ -43,13 +43,19 @@
 - **Card internal padding:** 8px vertical, 16px horizontal
 - **Metric grid gap:** 8px (sm)
 
-## Layout
-- **Approach:** Grid-disciplined — strict alignment, consistent gutters
-- **Popover width:** 320px
-- **Popover structure:** Hero metric (full width) > 2-column metrics grid > battery bar (full width) > sparkline chart (full width) > footer actions
-- **Grid:** 2 columns for metrics, 1 column for charts and battery
-- **Max content width:** 320px (popover), 288px inner content
-- **Border radius:** sm:4px (buttons, tags), md:8px (metric cards), lg:12px (popover container, component cards), full:9999px (toggles)
+## Layout (v2 — compact tool)
+- **Approach:** Glanceable menu bar tool — everything important in one screen, no scrolling in the default state, details behind progressive disclosure
+- **Popover width:** 320px; height fits content (reported via PreferenceKey, capped to screen)
+- **Popover structure:**
+  1. Header row: total watts (26px) left + battery chip (icon/%/time) right
+  2. Metric strip: CPU · GPU · PKG · RAM in one 4-column row (subs in tooltips)
+  3. Status line: display watts/brightness + hottest temp, one thin row
+  4. Power History: period chips + chart + avg/max footer
+  5. Disclosure rows (collapsed): DETAILS (clusters+sensors+fans), ACTIVE PROCESSES, AGENT SESSIONS
+  6. Footer: session energy (tiny) + gear (settings page) + quit
+- **Settings:** separate page behind the gear, back chevron returns to main
+- **Border radius:** sm:4px (buttons, tags), md:8px (strip, chips), lg:12px (popover container)
+- **v1 layout** (hero + 2x2 cards + inline settings) preserved at git tag `design-v1`
 
 ## Motion
 - **Approach:** Minimal-functional — precision, not playfulness
@@ -74,3 +80,4 @@
 | 2026-04-05 | SF Mono for all numbers | Precision instrument readout feel. Signature design choice that differentiates from dashboard-style monitors |
 | 2026-04-05 | Warm neutrals over cool grays | Premium feel. Warm charcoal #1C1B1F vs industry standard cold #1A1A2E |
 | 2026-04-05 | SwiftUI popover format | Modern UI approach vs NSMenu dropdown. Enables charts, animations, rich layout |
+| 2026-08-23 | Compact v2 layout | v1 scrolled (~810pt). Menu bar tools must be glanceable: header+strip replace hero+cards, settings moved to a gear page, popover auto-sizes to content. A big scrolling panel reads as "heavy app" — opposite of the product's low-footprint positioning |

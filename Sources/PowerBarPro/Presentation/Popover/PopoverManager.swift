@@ -41,7 +41,7 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentSize = NSSize(width: 340, height: maxContentHeight())
+        popover.contentSize = NSSize(width: 320, height: 420)
         self.popover = popover
         return popover
     }
@@ -85,10 +85,18 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
             processVM: processVM,
             agentSessionsVM: agentSessionsVM,
             settingsModel: settings.map(PopoverSettingsModel.init),
-            onQuit: onQuit
+            onQuit: onQuit,
+            onHeightChange: { [weak popover, weak self] height in
+                guard let popover, let self else { return }
+                // Fit the popover to content; cap to the visible screen area
+                let capped = min(height, self.maxContentHeight())
+                if abs(popover.contentSize.height - capped) > 1 {
+                    popover.contentSize = NSSize(width: 320, height: capped)
+                }
+            }
         )
         popover.contentViewController = NSHostingController(rootView: contentView)
-        popover.contentSize = NSSize(width: 340, height: maxContentHeight())
+        popover.contentSize = NSSize(width: 320, height: 420)
     }
 
     private func maxContentHeight() -> CGFloat {

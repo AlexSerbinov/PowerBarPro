@@ -103,6 +103,7 @@ enum L {
             : "Energy the system consumed while PowerBarPro has been running, and the session's average power."
     }
     static var cpuClusters: String { lang == .ukrainian ? "КЛАСТЕРИ CPU" : "CPU CLUSTERS" }
+    static var details: String { lang == .ukrainian ? "ДЕТАЛІ" : "DETAILS" }
     static var sensors: String { lang == .ukrainian ? "СЕНСОРИ" : "SENSORS" }
     static var agentSessions: String { lang == .ukrainian ? "СЕСІЇ АГЕНТІВ" : "AGENT SESSIONS" }
     static var noAgentSessions: String {
