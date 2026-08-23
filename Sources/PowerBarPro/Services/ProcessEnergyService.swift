@@ -86,7 +86,9 @@ final class ProcessEnergyService: ProcessMonitoring {
         var pidPowers: [PidPower] = []
 
         for pid in pids {
-            guard let energyNJ = getProcessEnergyNJ(pid: pid) else { continue }
+            // Single proc_pid_rusage call yields both energy and memory
+            guard let usage = getProcessRusage(pid: pid) else { continue }
+            let energyNJ = usage.energyNJ
 
             let name = resolveProcessName(pid: pid)
             let snapshot = ProcessEnergySnapshot(
@@ -111,13 +113,11 @@ final class ProcessEnergyService: ProcessMonitoring {
                 // Skip unreasonably large values (likely counter reset)
                 guard watts < 500.0 else { continue }
 
-                let memBytes = getProcessMemoryBytes(pid: pid)
-
                 pidPowers.append(PidPower(
                     pid: pid,
                     name: name,
                     watts: watts,
-                    memoryBytes: memBytes
+                    memoryBytes: usage.memoryBytes
                 ))
             }
         }
@@ -185,9 +185,14 @@ final class ProcessEnergyService: ProcessMonitoring {
 
     // MARK: - Private: proc_pid_rusage
 
-    /// Read the cumulative energy in nanojoules for a process.
-    /// Uses `proc_pid_rusage` with `RUSAGE_INFO_V6` flavor.
-    private func getProcessEnergyNJ(pid: pid_t) -> UInt64? {
+    /// Byte offset of `ri_phys_footprint` within `rusage_info_v4+`: 16 + 34*8.
+    private static let physFootprintOffset = 16 + 34 * 8  // 288
+
+    /// One `proc_pid_rusage` call per PID returning both cumulative energy
+    /// (`ri_energy_nj`) and resident memory (`ri_phys_footprint`).
+    /// Merged into a single syscall — this loop runs over every PID on the
+    /// system, so doubling the calls doubles our own CPU cost.
+    private func getProcessRusage(pid: pid_t) -> (energyNJ: UInt64, memoryBytes: UInt64)? {
         var buffer = [UInt8](repeating: 0, count: Self.rusageBufferSize)
         let result = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
             // proc_pid_rusage expects a pointer to a rusage_info_t (opaque pointer).
@@ -201,37 +206,16 @@ final class ProcessEnergyService: ProcessMonitoring {
         }
         guard result == 0 else { return nil }
 
-        // Read ri_energy_nj at the known offset within the struct
-        return buffer.withUnsafeBufferPointer { ptr in
-            guard Self.energyNJOffset + MemoryLayout<UInt64>.size <= ptr.count else {
+        return buffer.withUnsafeBufferPointer { ptr -> (UInt64, UInt64)? in
+            guard Self.energyNJOffset + MemoryLayout<UInt64>.size <= ptr.count,
+                  Self.physFootprintOffset + MemoryLayout<UInt64>.size <= ptr.count else {
                 return nil
             }
-            return ptr.baseAddress!.advanced(by: Self.energyNJOffset)
+            let energy = ptr.baseAddress!.advanced(by: Self.energyNJOffset)
                 .withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
-        }
-    }
-
-    /// Resident memory (bytes) for a process via `proc_pid_rusage`.
-    /// `ri_phys_footprint` is at offset 16 + 34*8 = 288 in rusage_info_v4+.
-    private func getProcessMemoryBytes(pid: pid_t) -> UInt64 {
-        var buffer = [UInt8](repeating: 0, count: Self.rusageBufferSize)
-        let result = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
-            ptr.baseAddress!.withMemoryRebound(
-                to: Optional<rusage_info_t>.self,
-                capacity: 1
-            ) { rusagePtr in
-                proc_pid_rusage(pid, Self.rusageInfoV6, rusagePtr)
-            }
-        }
-        guard result == 0 else { return 0 }
-
-        let physFootprintOffset = 16 + 34 * 8  // 288
-        return buffer.withUnsafeBufferPointer { ptr in
-            guard physFootprintOffset + MemoryLayout<UInt64>.size <= ptr.count else {
-                return 0
-            }
-            return ptr.baseAddress!.advanced(by: physFootprintOffset)
+            let mem = ptr.baseAddress!.advanced(by: Self.physFootprintOffset)
                 .withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
+            return (energy, mem)
         }
     }
 

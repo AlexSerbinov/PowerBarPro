@@ -16,7 +16,7 @@ final class HistoryPersistenceService {
     init(
         aggregator: PowerAggregating,
         storageURL: URL? = nil,
-        saveInterval: TimeInterval = 60,
+        saveInterval: TimeInterval = 120,
         maxAge: TimeInterval = Constants.Defaults.maxHistoryDuration
     ) {
         self.aggregator = aggregator

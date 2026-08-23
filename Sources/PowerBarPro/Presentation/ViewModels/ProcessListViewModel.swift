@@ -49,7 +49,22 @@ final class ProcessListViewModel: ObservableObject {
     /// Minimum interval between expensive process scans (seconds).
     /// Prevents proc_pid_rusage spam which causes high CPU/energy usage.
     private var lastProcessScan: Date = .distantPast
-    private let minScanInterval: TimeInterval = 5.0
+
+    /// True while any UI that shows the process list is on screen
+    /// (popover or right-click menu). Off-screen we still scan — the
+    /// power-hog alert service needs data — but 3x less often.
+    var isUIVisible = false {
+        didSet {
+            // Refresh promptly when the user opens the UI after idle
+            if isUIVisible && !oldValue { lastProcessScan = .distantPast }
+        }
+    }
+
+    private let visibleScanInterval: TimeInterval = 5.0
+    private let backgroundScanInterval: TimeInterval = 15.0
+    private var minScanInterval: TimeInterval {
+        isUIVisible ? visibleScanInterval : backgroundScanInterval
+    }
 
     /// Update process list with current system metrics.
     /// Display power updates every call. Process scan throttled to minScanInterval.

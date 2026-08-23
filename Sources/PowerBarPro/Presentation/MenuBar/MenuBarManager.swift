@@ -17,6 +17,17 @@ final class MenuBarManager: NSObject {
 
     private let processDescriptionService: ProcessDescriptionService?
 
+    // MARK: - Background-cost controls
+
+    /// Battery state comes from an `ioreg` subprocess — spawning one every
+    /// metrics tick (1s) is the single biggest self-cost. Estimates change
+    /// slowly; refresh every 30s and on battery-mode changes.
+    private var lastBatteryRefresh: Date = .distantPast
+    private let batteryRefreshInterval: TimeInterval = 30
+
+    /// True while the right-click menu is open (NSMenuDelegate).
+    private var isMenuOpen = false
+
     init(
         powerDisplayVM: PowerDisplayViewModel,
         batteryVM: BatteryViewModel,
@@ -86,11 +97,25 @@ final class MenuBarManager: NSObject {
         )
         pm.settings = settings
         pm.onQuit = { NSApplication.shared.terminate(nil) }
+        pm.onVisibilityChange = { [weak self] shown in
+            self?.updateProcessUIVisibility()
+            if shown {
+                // Battery line should be fresh when the user opens the popover
+                self?.lastBatteryRefresh = Date()
+                self?.batteryVM.refresh(currentMetrics: self?.powerDisplayVM.currentMetrics)
+            }
+        }
         popoverManager = pm
         _ = pm.createPopover()
 
         // Store menu for right-click usage
+        menu.delegate = self
         self.rightClickMenu = menu
+    }
+
+    /// Process scanning runs at full cadence only while some UI shows it.
+    private func updateProcessUIVisibility() {
+        processListVM.isUIVisible = isMenuOpen || (popoverManager?.isShown ?? false)
     }
 
     private var rightClickMenu: NSMenu?
@@ -186,12 +211,17 @@ final class MenuBarManager: NSObject {
             }
             .store(in: &cancellables)
 
-        // Refresh battery + process list on every metrics update
+        // Refresh battery (throttled) + process list on metrics updates
         powerDisplayVM.$currentMetrics
             .receive(on: DispatchQueue.main)
             .sink { [weak self] metrics in
-                self?.batteryVM.refresh(currentMetrics: metrics)
-                self?.processListVM.refresh(metrics: metrics)
+                guard let self = self else { return }
+                let now = Date()
+                if now.timeIntervalSince(self.lastBatteryRefresh) >= self.batteryRefreshInterval {
+                    self.lastBatteryRefresh = now
+                    self.batteryVM.refresh(currentMetrics: metrics)
+                }
+                self.processListVM.refresh(metrics: metrics)
             }
             .store(in: &cancellables)
 
@@ -218,11 +248,13 @@ final class MenuBarManager: NSObject {
             }
             .store(in: &cancellables)
 
-        // Process list (uses attributed processes for accurate power values)
+        // Process list (uses attributed processes for accurate power values).
+        // Rebuilding NSMenuItems + icons + LLM prefetch is pointless while
+        // the menu is hidden — rebuild only when it's actually open.
         processListVM.$attributedProcesses
             .receive(on: DispatchQueue.main)
             .sink { [weak self] attributed in
-                guard let self = self, let menu = self.rightClickMenu else { return }
+                guard let self = self, self.isMenuOpen, let menu = self.rightClickMenu else { return }
                 let sysW = self.powerDisplayVM.currentMetrics?.sysPowerW ?? 0
                 // Convert attributed to ProcessPowerInfo for menu builder
                 let infos = attributed.map { ap in
@@ -261,5 +293,37 @@ final class MenuBarManager: NSObject {
                 self?.menuBuilder.updateIntervalCheckmarks(menu: menu, intervalMs: interval)
             }
             .store(in: &cancellables)
+    }
+}
+
+// MARK: - NSMenuDelegate (right-click menu visibility)
+
+extension MenuBarManager: NSMenuDelegate {
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === rightClickMenu else { return }
+        isMenuOpen = true
+        updateProcessUIVisibility()
+        // Populate immediately with the freshest data we have
+        let sysW = powerDisplayVM.currentMetrics?.sysPowerW ?? 0
+        let infos = processListVM.attributedProcesses.map { ap in
+            ProcessPowerInfo(
+                id: ap.id, name: ap.name,
+                powerWatts: ap.totalWatts,
+                percentOfSystem: ap.percentOfSystem,
+                memoryBytes: ap.memoryBytes,
+                pidCount: ap.pidCount, pids: ap.pids
+            )
+        }
+        menuBuilder.updateProcessList(menu: menu, processes: infos, systemPowerW: sysW)
+        // Battery line should be fresh when the user actually looks at it
+        lastBatteryRefresh = Date()
+        batteryVM.refresh(currentMetrics: powerDisplayVM.currentMetrics)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === rightClickMenu else { return }
+        isMenuOpen = false
+        updateProcessUIVisibility()
     }
 }
