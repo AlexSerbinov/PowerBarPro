@@ -327,17 +327,21 @@ struct FooterRowView: View {
             Spacer()
 
             Button(action: onSettings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 11))
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15))
                     .foregroundColor(Color.PB.textMuted)
+                    .padding(4)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Settings")
 
             Button(action: { onQuit?() }) {
                 Image(systemName: "power")
-                    .font(.system(size: 11))
+                    .font(.system(size: 14))
                     .foregroundColor(Color.PB.textMuted)
+                    .padding(4)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(L.quit)
@@ -667,6 +671,8 @@ struct DetailsSectionView: View {
                 isExpanded: $isExpanded
             ) {
                 VStack(spacing: 2) {
+                    systemStatsRows
+
                     ForEach(clusters, id: \.name) { cluster in
                         ClusterRowView(
                             cluster: cluster,
@@ -700,6 +706,64 @@ struct DetailsSectionView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// System load / memory / swap / disk rows — syscall-backed, computed
+    /// per render only while the section is expanded.
+    @ViewBuilder
+    private var systemStatsRows: some View {
+        let stats = SystemStatsProvider.current()
+
+        if let usage = metrics?.cpuUsagePct, !usage.isEmpty {
+            let avg = usage.reduce(0, +) / Double(usage.count) * 100
+            SensorRowView(
+                icon: "gauge.with.needle",
+                name: "CPU Load",
+                value: String(format: "%.0f%%", avg),
+                valueColor: avg >= 80 ? Color.PB.error : Color.PB.textPrimary
+            )
+            .help(String(format: "Load avg (1m): %.2f", stats.loadAvg1))
+        }
+
+        if let used = metrics?.memUsedGb, let total = metrics?.dramGb {
+            let pct = used / Double(total) * 100
+            SensorRowView(
+                icon: "memorychip",
+                name: "RAM",
+                value: String(format: "%.1f / %d GB", used, total),
+                valueColor: pct >= 90 ? Color.PB.error : Color.PB.textPrimary
+            )
+        }
+
+        if stats.swapTotalBytes > 0 {
+            SensorRowView(
+                icon: "arrow.left.arrow.right",
+                name: "Swap",
+                value: String(
+                    format: "%.1f / %.0f GB",
+                    Double(stats.swapUsedBytes) / 1_073_741_824,
+                    Double(stats.swapTotalBytes) / 1_073_741_824
+                ),
+                valueColor: Color.PB.textPrimary
+            )
+        }
+
+        if stats.diskTotalBytes > 0 {
+            SensorRowView(
+                icon: "internaldrive",
+                name: "Disk",
+                value: String(
+                    format: "%.0f GB free",
+                    Double(stats.diskFreeBytes) / 1_000_000_000
+                ),
+                valueColor: Color.PB.textPrimary
+            )
+            .help(String(
+                format: "%.0f of %.0f GB used",
+                Double(stats.diskTotalBytes - stats.diskFreeBytes) / 1_000_000_000,
+                Double(stats.diskTotalBytes) / 1_000_000_000
+            ))
         }
     }
 
@@ -1073,6 +1137,9 @@ struct AgentSessionRowView: View {
     @State private var isHovered = false
 
     var body: some View {
+        // Buttons are always in the layout and only fade in on hover —
+        // conditionally inserting them shifted the row under the cursor,
+        // which broke hover tracking and made the highlight flicker.
         HStack(spacing: Spacing.sm) {
             Circle()
                 .fill(memoryColor)
@@ -1091,25 +1158,17 @@ struct AgentSessionRowView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: Spacing.sm)
 
-            if isHovered {
-                Button(action: { vm.revealInFinder(session) }) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color.PB.textMuted)
-                }
-                .buttonStyle(.plain)
-                .help(L.showInFinder)
-
-                Button(action: { vm.requestKill(session) }) {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color.PB.error.opacity(0.8))
-                }
-                .buttonStyle(.plain)
-                .help(L.killSessionConfirm)
+            Button(action: { vm.revealInFinder(session) }) {
+                Image(systemName: "folder")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.PB.textMuted)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .opacity(isHovered ? 1 : 0)
+            .help(L.showInFinder)
 
             Text("\(session.rssMB) MB")
                 .font(.system(size: 11, design: .monospaced))
@@ -1119,13 +1178,28 @@ struct AgentSessionRowView: View {
             Text(String(format: "%.0f%%", session.cpuPercent))
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(Color.PB.textMuted)
-                .frame(width: 30, alignment: .trailing)
+                .frame(width: 26, alignment: .trailing)
+
+            // Kill at the far right, larger, no confirmation —
+            // the conversation survives on disk (`--resume`)
+            Button(action: { vm.kill(session) }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color.PB.error.opacity(0.85))
+                    .padding(2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isHovered ? 1 : 0)
+            .help(L.killSessionConfirm)
         }
         .padding(.vertical, 3)
         .padding(.horizontal, Spacing.md)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
         .help("PID \(session.pid) · up \(session.uptime)\n\(session.cwd)")
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            if isHovered != hovering { isHovered = hovering }
+        }
     }
 
     private var memoryColor: Color {

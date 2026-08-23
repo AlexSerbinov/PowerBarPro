@@ -118,6 +118,70 @@ final class MenuBarManager: NSObject {
         processListVM.isUIVisible = isMenuOpen || (popoverManager?.isShown ?? false)
     }
 
+    // MARK: - Status button rendering (watts + fan-load bar)
+
+    /// The thin fan-load bar overlaid at the bottom of the status button.
+    private var fanBarView: FanBarView?
+
+    /// Menu bar content: native wattage title + fan-load bar subview at the
+    /// bottom (MacFans-style). A subview is used instead of a rendered
+    /// NSImage: the status bar clips/normalizes custom images, which ate
+    /// the bar entirely. Hidden automatically on fanless Macs.
+    private func updateStatusButton(text: String) {
+        guard let button = statusItem?.button else { return }
+        button.title = text
+
+        guard let fraction = Self.fanLoadFraction(powerDisplayVM.currentMetrics) else {
+            fanBarView?.isHidden = true
+            return
+        }
+
+        let bar = ensureFanBarView(in: button)
+        bar.isHidden = false
+        bar.update(fraction: fraction, color: Self.fanBarColor(fraction))
+    }
+
+    private func ensureFanBarView(in button: NSStatusBarButton) -> FanBarView {
+        if let bar = fanBarView, bar.superview === button { return bar }
+
+        let bar = FanBarView()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(bar)
+        NSLayoutConstraint.activate([
+            bar.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 4),
+            bar.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -4),
+            bar.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1.5),
+            bar.heightAnchor.constraint(equalToConstant: 3),
+        ])
+        fanBarView = bar
+        return bar
+    }
+
+    /// Highest fan load across all fans, normalized to 0...1 by each fan's
+    /// min/max RPM range. Nil when the machine has no fans.
+    static func fanLoadFraction(_ metrics: SystemMetrics?) -> Double? {
+        fanLoadFraction(fans: metrics?.fans ?? [])
+    }
+
+    static func fanLoadFraction(fans: [FanMetrics]) -> Double? {
+        guard !fans.isEmpty else { return nil }
+        let fractions = fans.compactMap { fan -> Double? in
+            let minR = fan.minRpm ?? 0
+            guard let maxR = fan.maxRpm, maxR > minR else { return nil }
+            return max(0, min(1, (fan.actualRpm - minR) / (maxR - minR)))
+        }
+        return fractions.max()
+    }
+
+    static func fanBarColor(_ fraction: Double) -> NSColor {
+        switch fraction {
+        case ..<0.4: return .systemGreen
+        case ..<0.7: return NSColor(red: 0.91, green: 0.64, blue: 0.29, alpha: 1)  // amber
+        default: return .systemRed
+        }
+    }
+
+
     private var rightClickMenu: NSMenu?
 
     @objc private func statusItemClicked(_ sender: Any?) {
@@ -171,11 +235,11 @@ final class MenuBarManager: NSObject {
     }
 
     private func bindViewModels() {
-        // Power display → menu bar title
+        // Power display → menu bar title (with fan-load bar when fans exist)
         powerDisplayVM.$statusText
             .receive(on: DispatchQueue.main)
             .sink { [weak self] text in
-                self?.statusItem?.button?.title = text
+                self?.updateStatusButton(text: text)
             }
             .store(in: &cancellables)
 
@@ -326,4 +390,52 @@ extension MenuBarManager: NSMenuDelegate {
         isMenuOpen = false
         updateProcessUIVisibility()
     }
+}
+
+// MARK: - Fan bar view (bottom of the status button)
+
+/// Thin rounded progress bar rendered with CALayers — track + colored fill.
+final class FanBarView: NSView {
+
+    private let track = CALayer()
+    private let fill = CALayer()
+    private var fraction: Double = 0
+    private var fillColor: NSColor = .systemGreen
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        track.cornerRadius = 1.5
+        fill.cornerRadius = 1.5
+        layer?.addSublayer(track)
+        layer?.addSublayer(fill)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func update(fraction: Double, color: NSColor) {
+        self.fraction = max(0, min(1, fraction))
+        self.fillColor = color
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.frame = bounds
+        fill.frame = CGRect(
+            x: 0, y: 0,
+            width: max(bounds.height, bounds.width * CGFloat(fraction)),
+            height: bounds.height
+        )
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            track.backgroundColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
+            fill.backgroundColor = fillColor.cgColor
+        }
+        CATransaction.commit()
+    }
+
+    /// The bar is decorative — clicks belong to the status button.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

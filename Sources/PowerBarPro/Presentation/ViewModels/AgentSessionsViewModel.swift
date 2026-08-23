@@ -33,20 +33,17 @@ final class AgentSessionsViewModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: session.cwd)])
     }
 
-    /// Kill with confirmation. The conversation stays on disk — resume works.
-    func requestKill(_ session: AgentSession) {
-        let alert = NSAlert()
-        alert.messageText = L.killSessionTitle(session.displayLabel, pid: session.pid)
-        alert.informativeText = L.killSessionBody
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L.killSessionConfirm)
-        alert.addButton(withTitle: L.cancel)
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            service.kill(pid: session.pid)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.refresh()
-            }
+    /// Kill immediately, no confirmation — SIGTERM is graceful and the
+    /// conversation stays on disk (`claude --resume` / `codex resume`).
+    func kill(_ session: AgentSession) {
+        service.kill(pid: session.pid)
+        // Optimistically drop the row; a real snapshot follows shortly
+        snapshot = AgentSessionsSnapshot(
+            sessions: snapshot.sessions.filter { $0.pid != session.pid },
+            helpersMB: snapshot.helpersMB
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.refresh()
         }
     }
 }

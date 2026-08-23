@@ -215,3 +215,45 @@ final class HistoryPersistenceTests: XCTestCase {
         XCTAssertEqual(all.count, 3)
     }
 }
+
+// MARK: - Fan load bar (menu bar)
+
+final class FanLoadFractionTests: XCTestCase {
+
+    private func fan(_ actual: Double, min: Double? = 0, max: Double? = 6000) -> FanMetrics {
+        FanMetrics(id: 0, name: "Fan", actualRpm: actual, minRpm: min, maxRpm: max)
+    }
+
+    func testNoFansReturnsNil() {
+        XCTAssertNil(MenuBarManager.fanLoadFraction(fans: []))
+    }
+
+    func testNormalizesWithinMinMaxRange() {
+        let f = MenuBarManager.fanLoadFraction(fans: [fan(3000, min: 0, max: 6000)])
+        XCTAssertEqual(f ?? -1, 0.5, accuracy: 0.001)
+    }
+
+    func testTakesHighestOfMultipleFans() {
+        let f = MenuBarManager.fanLoadFraction(fans: [
+            fan(1200, min: 1200, max: 6000),   // idle -> 0
+            fan(4800, min: 1200, max: 6000),   // 0.75
+        ])
+        XCTAssertEqual(f ?? -1, 0.75, accuracy: 0.001)
+    }
+
+    func testClampsAboveMaxAndBelowMin() {
+        XCTAssertEqual(MenuBarManager.fanLoadFraction(fans: [fan(9000)]) ?? -1, 1.0, accuracy: 0.001)
+        XCTAssertEqual(MenuBarManager.fanLoadFraction(fans: [fan(500, min: 1200)]) ?? -1, 0.0, accuracy: 0.001)
+    }
+
+    func testInvalidRangeIgnored() {
+        XCTAssertNil(MenuBarManager.fanLoadFraction(fans: [fan(3000, min: 0, max: nil)]))
+    }
+
+    func testBarColorBands() {
+        XCTAssertEqual(MenuBarManager.fanBarColor(0.2), .systemGreen)
+        XCTAssertEqual(MenuBarManager.fanBarColor(0.9), .systemRed)
+        XCTAssertNotEqual(MenuBarManager.fanBarColor(0.5), .systemGreen)
+        XCTAssertNotEqual(MenuBarManager.fanBarColor(0.5), .systemRed)
+    }
+}
