@@ -47,17 +47,22 @@ final class FanControlViewModel: ObservableObject {
 
     // MARK: - Private
 
+    /// Serial queue: rapid picker clicks must all reach the daemon in order —
+    /// dropping requests while "busy" silently ate every second change.
+    private let requestQueue = DispatchQueue(label: "powerbarpro.macfans-client", qos: .userInitiated)
+
     private func perform(_ request: MacFans.Request) {
-        guard !isBusy else { return }
         isBusy = true
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        requestQueue.async { [weak self] in
             let result = try? MacFans.send(request)
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.isBusy = false
                 if let result, result.ok {
                     self.reply = result
-                    self.maybeShowHUD(result, isCommand: request.cmd != "status")
+                    // HUD only for mode switches — curve tweaks and status
+                    // refreshes would spam it
+                    self.maybeShowHUD(result, isCommand: request.cmd == "set")
                 } else if request.cmd == "status" {
                     self.reply = nil
                 }

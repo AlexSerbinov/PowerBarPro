@@ -258,7 +258,7 @@ final class FanLoadFractionTests: XCTestCase {
 
     func testModeTintPalette() {
         XCTAssertEqual(MacFans.modeTint(mode: .auto, pct: 0), .secondaryLabelColor)
-        XCTAssertEqual(MacFans.modeTint(mode: .curve, pct: 60), .systemPurple)
+        XCTAssertEqual(MacFans.modeTint(mode: .curve, pct: 60), .systemYellow)
         XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 30), .systemGreen)
         XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 70), .systemBlue)
         XCTAssertEqual(MacFans.modeTint(mode: .manual, pct: 100), .systemOrange)

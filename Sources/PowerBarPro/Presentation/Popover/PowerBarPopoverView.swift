@@ -1102,17 +1102,16 @@ struct FanControlSectionView: View {
                     }
                     .padding(.horizontal, Spacing.md)
 
-                    // Battery curve bounds, editable in place
+                    // Battery curve bounds, editable in place — standard
+                    // settings-picker styling (amber), not the mode color
                     if let curve = vm.reply?.curve {
-                        CurveEditorRow(curve: curve, accent: curveColor) { vm.setCurve($0) }
+                        CurveEditorRow(curve: curve, accent: Color.PB.accent) { vm.setCurve($0) }
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
-
-    private var curveColor: Color { Color(nsColor: MacFans.modeTint(mode: .curve, pct: 0)) }
 
     /// Badge takes the active mode's color; neutral info-blue before the
     /// first status arrives.
@@ -1151,8 +1150,10 @@ struct FanControlSectionView: View {
                         .fill(isActive ? color : Color.PB.surface)
                 )
                 .overlay(
+                    // Inactive chips stay neutral — per-chip colored borders
+                    // read as visual noise; only the active mode lights up.
                     RoundedRectangle(cornerRadius: CornerRadius.sm)
-                        .stroke(isActive ? Color.clear : color.opacity(0.35), lineWidth: 1)
+                        .stroke(isActive ? Color.clear : Color.PB.separator, lineWidth: 1)
                 )
                 .contentShape(Rectangle())
         }

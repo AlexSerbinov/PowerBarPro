@@ -49,7 +49,7 @@ enum MacFans {
     static func modeTint(mode: Mode, pct: Int) -> NSColor {
         switch mode {
         case .auto: return .secondaryLabelColor
-        case .curve: return .systemPurple
+        case .curve: return .systemYellow
         case .manual:
             if pct >= 85 { return .systemOrange }
             return pct >= 50 ? .systemBlue : .systemGreen
