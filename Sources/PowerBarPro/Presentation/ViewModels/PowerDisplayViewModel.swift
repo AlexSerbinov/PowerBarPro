@@ -15,13 +15,14 @@ final class PowerDisplayViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let powerMonitor: PowerMonitoring
-    private let aggregator: PowerAggregator
+    private let aggregator: PowerAggregating
     private let settings: SettingsStorage
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - State
 
-    private var currentMetrics: PowerMetrics?
+    /// Exposed for consumers that need raw metrics (e.g. BatteryViewModel).
+    @Published private(set) var currentMetrics: SystemMetrics?
     private var isRunning = false
     private var error: AppError?
 
@@ -29,7 +30,7 @@ final class PowerDisplayViewModel: ObservableObject {
 
     init(
         powerMonitor: PowerMonitoring,
-        aggregator: PowerAggregator,
+        aggregator: PowerAggregating,
         settings: SettingsStorage
     ) {
         self.powerMonitor = powerMonitor

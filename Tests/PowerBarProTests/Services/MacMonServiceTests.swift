@@ -2,7 +2,7 @@ import XCTest
 import Combine
 @testable import PowerBarPro
 
-final class MacMonServiceTests: XCTestCase {
+final class MacPowServiceTests: XCTestCase {
 
     var mockRunner: MockProcessRunner!
     var cancellables: Set<AnyCancellable>!
@@ -23,7 +23,7 @@ final class MacMonServiceTests: XCTestCase {
 
     func testStartMonitoring_macmonNotFound_emitsError() {
         mockRunner.stubbedExecutablePath = nil // macmon not found
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         let exp = expectation(description: "error emitted")
 
@@ -43,7 +43,7 @@ final class MacMonServiceTests: XCTestCase {
 
     func testStartMonitoring_macmonNotFound_staysNotRunning() {
         mockRunner.stubbedExecutablePath = nil
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         service.startMonitoring()
 
@@ -62,7 +62,7 @@ final class MacMonServiceTests: XCTestCase {
     // MARK: - Initial state
 
     func testInitialState_notRunning() {
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         let exp = expectation(description: "initial state")
         service.isRunningPublisher
@@ -77,7 +77,7 @@ final class MacMonServiceTests: XCTestCase {
     }
 
     func testInitialState_noMetrics() {
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         let exp = expectation(description: "initial metrics")
         service.metricsPublisher
@@ -92,7 +92,7 @@ final class MacMonServiceTests: XCTestCase {
     }
 
     func testInitialState_noError() {
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         let exp = expectation(description: "initial error")
         service.errorPublisher
@@ -109,7 +109,7 @@ final class MacMonServiceTests: XCTestCase {
     // MARK: - stopMonitoring
 
     func testStopMonitoring_whenNotRunning_noOp() {
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         // Should not crash
         service.stopMonitoring()
@@ -129,7 +129,7 @@ final class MacMonServiceTests: XCTestCase {
     // MARK: - setUpdateInterval
 
     func testSetUpdateInterval_whenNotRunning_updatesInternally() {
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         // Should not crash, just stores the value
         service.setUpdateInterval(500)
@@ -152,7 +152,7 @@ final class MacMonServiceTests: XCTestCase {
     func testStartMonitoring_doubleCall_noOp() {
         // If macmon is found, first call starts, second should be no-op
         mockRunner.stubbedExecutablePath = "/opt/homebrew/bin/macmon"
-        let service = MacMonService(processRunner: mockRunner)
+        let service = MacPowService(processRunner: mockRunner)
 
         // The process won't actually run (mock returns a Process but doesn't set a valid executable)
         // We're testing the guard logic

@@ -3,6 +3,15 @@ import Foundation
 /// App-wide constants. Centralised to avoid magic numbers.
 enum Constants {
 
+    enum MacPow {
+        static let searchPaths = [
+            "/opt/homebrew/bin/macpow",
+            "/usr/local/bin/macpow",
+            "/usr/bin/macpow"
+        ]
+        static let binaryName = "macpow"
+    }
+
     enum MacMon {
         static let searchPaths = [
             "/opt/homebrew/bin/macmon",
@@ -27,6 +36,8 @@ enum Constants {
 
         static let availableIntervals = [100, 250, 500, 1000, 2500]
         static let availableAveragePeriods = [3, 10, 30, 60, 300, 600, 1800, 3600, 0]
+        static let processAveragingSeconds = 30  // Default: 30s averaging for process list
+        static let availableProcessAveragingPeriods = [0, 5, 10, 30, 60, 300]  // 0 = instant
     }
 
     enum UI {

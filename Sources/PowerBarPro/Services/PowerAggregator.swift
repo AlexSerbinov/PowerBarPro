@@ -2,10 +2,11 @@ import Foundation
 
 /// Maintains a rolling buffer of power readings and calculates
 /// time-based averages. Pure logic — no I/O, fully testable.
-final class PowerAggregator {
+final class PowerAggregator: PowerAggregating {
 
     private var history: [PowerReading] = []
     private let maxHistoryDuration: TimeInterval
+    private let lock = NSLock()
 
     init(maxHistoryDuration: TimeInterval = Constants.Defaults.maxHistoryDuration) {
         self.maxHistoryDuration = maxHistoryDuration
@@ -15,18 +16,24 @@ final class PowerAggregator {
 
     /// Record a new power sample.
     func record(_ reading: PowerReading) {
+        lock.lock()
+        defer { lock.unlock() }
         history.append(reading)
         pruneOldReadings()
     }
 
     /// Remove all recorded readings.
     func reset() {
+        lock.lock()
+        defer { lock.unlock() }
         history.removeAll()
     }
 
     /// Get readings within a time window.
     /// - Parameter seconds: Window size. 0 = all history.
     func readings(for seconds: Int) -> [PowerReading] {
+        lock.lock()
+        defer { lock.unlock() }
         if seconds == 0 {
             return history
         }
@@ -47,7 +54,7 @@ final class PowerAggregator {
 
     /// Resolve the effective power value for a given display mode.
     /// Falls back to instant if averaging data is insufficient.
-    func resolvedPower(for mode: DisplayMode, instant: PowerMetrics?) -> Double? {
+    func resolvedPower(for mode: DisplayMode, instant: SystemMetrics?) -> Double? {
         guard let metrics = instant else { return nil }
 
         switch mode {
@@ -62,7 +69,11 @@ final class PowerAggregator {
     }
 
     /// Number of readings currently in the buffer.
-    var readingCount: Int { history.count }
+    var readingCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return history.count
+    }
 
     // MARK: - Private
 

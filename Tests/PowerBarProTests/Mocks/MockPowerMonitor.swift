@@ -5,11 +5,11 @@ import Combine
 /// Mock power monitor for testing. Allows injecting metrics, errors, and running state.
 final class MockPowerMonitor: PowerMonitoring {
 
-    private let metricsSubject = CurrentValueSubject<PowerMetrics?, Never>(nil)
+    private let metricsSubject = CurrentValueSubject<SystemMetrics?, Never>(nil)
     private let errorSubject = CurrentValueSubject<AppError?, Never>(nil)
     private let isRunningSubject = CurrentValueSubject<Bool, Never>(false)
 
-    var metricsPublisher: AnyPublisher<PowerMetrics?, Never> {
+    var metricsPublisher: AnyPublisher<SystemMetrics?, Never> {
         metricsSubject.eraseToAnyPublisher()
     }
     var errorPublisher: AnyPublisher<AppError?, Never> {
@@ -44,7 +44,7 @@ final class MockPowerMonitor: PowerMonitoring {
 
     // MARK: - Test Helpers
 
-    func emit(_ metrics: PowerMetrics) {
+    func emit(_ metrics: SystemMetrics) {
         metricsSubject.send(metrics)
     }
 

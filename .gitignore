@@ -31,3 +31,8 @@ xcuserdata/
 
 # Cursor
 .cursorrules
+.gstack/
+
+# Secrets & local artifacts
+.env
+calibration_log.txt

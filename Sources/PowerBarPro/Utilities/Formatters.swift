@@ -10,8 +10,9 @@ enum Formatters {
 
     /// Format time interval as "Xh YYm" or "Xm" for display.
     static func remainingTime(_ interval: TimeInterval) -> String {
-        let hours = Int(interval / 3600)
-        let minutes = Int((interval.truncatingRemainder(dividingBy: 3600)) / 60)
+        let clamped = max(interval, 0)
+        let hours = Int(clamped / 3600)
+        let minutes = Int((clamped.truncatingRemainder(dividingBy: 3600)) / 60)
 
         if hours > 0 {
             return String(format: "%dh %02dm", hours, minutes)
@@ -21,7 +22,7 @@ enum Formatters {
     }
 
     /// Multi-line power breakdown for tooltips/details.
-    static func detailedBreakdown(_ metrics: PowerMetrics) -> String {
+    static func detailedBreakdown(_ metrics: SystemMetrics) -> String {
         """
         System: \(power(metrics.sysPower))
         CPU: \(power(metrics.cpuPower))
@@ -32,7 +33,7 @@ enum Formatters {
     }
 
     /// Single-line power breakdown for menu items.
-    static func inlineBreakdown(_ metrics: PowerMetrics) -> String {
+    static func inlineBreakdown(_ metrics: SystemMetrics) -> String {
         "System: \(power(metrics.sysPower)) | CPU: \(power(metrics.cpuPower)) | GPU: \(power(metrics.gpuPower)) | ANE: \(power(metrics.anePower)) | RAM: \(power(metrics.ramPower))"
     }
 
@@ -52,6 +53,18 @@ enum Formatters {
         default:
             if seconds >= 60 { return "\(seconds / 60) minutes" }
             return "\(seconds) seconds"
+        }
+    }
+
+    /// Format process watts with adaptive units (uW, mW, W).
+    static func processWatts(_ watts: Double) -> String {
+        let w = max(watts, 0)
+        if w < 0.001 {
+            return String(format: "%.0f uW", w * 1_000_000)
+        } else if w < 1.0 {
+            return String(format: "%.1f mW", w * 1000)
+        } else {
+            return String(format: "%.2f W", w)
         }
     }
 }

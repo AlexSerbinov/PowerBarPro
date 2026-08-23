@@ -7,6 +7,7 @@ final class MockBatteryMonitor: BatteryMonitoring {
     var stubbedBatteryState: BatteryState?
     var stubbedRemainingTime: TimeInterval?
     private(set) var calculateRemainingTimeCallCount = 0
+    private(set) var lastCalculateArgs: (battery: BatteryState, power: Double)?
 
     func getBatteryState() -> BatteryState? {
         stubbedBatteryState
@@ -14,6 +15,7 @@ final class MockBatteryMonitor: BatteryMonitoring {
 
     func calculateRemainingTime(battery: BatteryState, averagePowerW: Double) -> TimeInterval? {
         calculateRemainingTimeCallCount += 1
+        lastCalculateArgs = (battery: battery, power: averagePowerW)
         return stubbedRemainingTime
     }
 }

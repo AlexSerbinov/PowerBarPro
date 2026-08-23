@@ -9,6 +9,8 @@ final class UserDefaultsStore: SettingsStorage {
         static let displayMode = "powerbar.displayMode"
         static let batteryDisplayMode = "powerbar.batteryDisplayMode"
         static let updateIntervalMs = "powerbar.updateIntervalMs"
+        static let processAveragingSeconds = "powerbar.processAveragingSeconds"
+        static let language = "powerbar.language"
     }
 
     // MARK: - Backing storage
@@ -16,6 +18,8 @@ final class UserDefaultsStore: SettingsStorage {
     @Published var displayMode: DisplayMode
     @Published var batteryDisplayMode: DisplayMode
     @Published var updateIntervalMs: Int
+    @Published var processAveragingSeconds: Int
+    @Published var language: AppLanguage
 
     // MARK: - Publishers
 
@@ -27,6 +31,12 @@ final class UserDefaultsStore: SettingsStorage {
     }
     var updateIntervalMsPublisher: AnyPublisher<Int, Never> {
         $updateIntervalMs.eraseToAnyPublisher()
+    }
+    var processAveragingSecondsPublisher: AnyPublisher<Int, Never> {
+        $processAveragingSeconds.eraseToAnyPublisher()
+    }
+    var languagePublisher: AnyPublisher<AppLanguage, Never> {
+        $language.eraseToAnyPublisher()
     }
 
     // MARK: - Init
@@ -51,6 +61,21 @@ final class UserDefaultsStore: SettingsStorage {
             ? savedInterval
             : Constants.Defaults.updateIntervalMs
 
+        let savedProcessAvg = defaults.integer(forKey: Keys.processAveragingSeconds)
+        self.processAveragingSeconds = savedProcessAvg > 0
+            ? savedProcessAvg
+            : Constants.Defaults.processAveragingSeconds
+
+        if let langStr = defaults.string(forKey: Keys.language),
+           let savedLang = AppLanguage(rawValue: langStr) {
+            self.language = savedLang
+        } else {
+            self.language = AppLanguage.system
+        }
+
+        // Sync L.lang with initial value
+        L.lang = self.language
+
         // Auto-persist changes
         $displayMode
             .dropFirst()
@@ -70,6 +95,21 @@ final class UserDefaultsStore: SettingsStorage {
             .dropFirst()
             .sink { [weak self] interval in
                 self?.defaults.set(interval, forKey: Keys.updateIntervalMs)
+            }
+            .store(in: &cancellables)
+
+        $processAveragingSeconds
+            .dropFirst()
+            .sink { [weak self] secs in
+                self?.defaults.set(secs, forKey: Keys.processAveragingSeconds)
+            }
+            .store(in: &cancellables)
+
+        $language
+            .dropFirst()
+            .sink { [weak self] lang in
+                self?.defaults.set(lang.rawValue, forKey: Keys.language)
+                L.lang = lang
             }
             .store(in: &cancellables)
     }

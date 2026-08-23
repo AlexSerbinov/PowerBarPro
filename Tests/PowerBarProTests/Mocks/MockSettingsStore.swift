@@ -8,6 +8,8 @@ final class MockSettingsStore: SettingsStorage {
     @Published var displayMode: DisplayMode
     @Published var batteryDisplayMode: DisplayMode
     @Published var updateIntervalMs: Int
+    @Published var processAveragingSeconds: Int
+    @Published var language: AppLanguage
 
     var displayModePublisher: AnyPublisher<DisplayMode, Never> {
         $displayMode.eraseToAnyPublisher()
@@ -18,14 +20,24 @@ final class MockSettingsStore: SettingsStorage {
     var updateIntervalMsPublisher: AnyPublisher<Int, Never> {
         $updateIntervalMs.eraseToAnyPublisher()
     }
+    var processAveragingSecondsPublisher: AnyPublisher<Int, Never> {
+        $processAveragingSeconds.eraseToAnyPublisher()
+    }
+    var languagePublisher: AnyPublisher<AppLanguage, Never> {
+        $language.eraseToAnyPublisher()
+    }
 
     init(
         displayMode: DisplayMode = Constants.Defaults.displayMode,
         batteryDisplayMode: DisplayMode = Constants.Defaults.batteryDisplayMode,
-        updateIntervalMs: Int = Constants.Defaults.updateIntervalMs
+        updateIntervalMs: Int = Constants.Defaults.updateIntervalMs,
+        processAveragingSeconds: Int = Constants.Defaults.processAveragingSeconds,
+        language: AppLanguage = .english
     ) {
         self.displayMode = displayMode
         self.batteryDisplayMode = batteryDisplayMode
         self.updateIntervalMs = updateIntervalMs
+        self.processAveragingSeconds = processAveragingSeconds
+        self.language = language
     }
 }

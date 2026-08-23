@@ -15,4 +15,12 @@ protocol SettingsStorage: AnyObject {
     /// macmon polling interval in milliseconds.
     var updateIntervalMs: Int { get set }
     var updateIntervalMsPublisher: AnyPublisher<Int, Never> { get }
+
+    /// Averaging period for process power display (seconds). 0 = instant.
+    var processAveragingSeconds: Int { get set }
+    var processAveragingSecondsPublisher: AnyPublisher<Int, Never> { get }
+
+    /// App language setting.
+    var language: AppLanguage { get set }
+    var languagePublisher: AnyPublisher<AppLanguage, Never> { get }
 }

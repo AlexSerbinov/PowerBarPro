@@ -65,6 +65,34 @@ final class BatteryViewModelTests: XCTestCase {
         XCTAssertTrue(vm.batteryText.contains("charging"))
     }
 
+    func testRefresh_passesCorrectPowerToCalculation() {
+        let battery = TestData.batteryOnBattery(capacity: 5000, voltage: 12000)
+        mockBattery.stubbedBatteryState = battery
+        mockBattery.stubbedRemainingTime = 7200
+
+        let metrics = TestData.metrics(sysPower: 15.0)
+        vm.refresh(currentMetrics: metrics)
+
+        // Verify the mock was called with correct args
+        XCTAssertEqual(mockBattery.calculateRemainingTimeCallCount, 1)
+        XCTAssertNotNil(mockBattery.lastCalculateArgs)
+        XCTAssertEqual(mockBattery.lastCalculateArgs?.battery, battery)
+        XCTAssertEqual(mockBattery.lastCalculateArgs!.power, 15.0, accuracy: 0.001)
+    }
+
+    func testRefresh_batteryBecomesNilMidSession() {
+        // First: battery available
+        mockBattery.stubbedBatteryState = TestData.batteryOnBattery()
+        mockBattery.stubbedRemainingTime = 3600
+        vm.refresh(currentMetrics: TestData.sampleMetrics())
+        XCTAssertTrue(vm.batteryText.contains("remaining"))
+
+        // Then: battery removed (desktop Mac)
+        mockBattery.stubbedBatteryState = nil
+        vm.refresh(currentMetrics: TestData.sampleMetrics())
+        XCTAssertEqual(vm.batteryText, "Battery: Unavailable")
+    }
+
     func testRefresh_noPowerValue_showsCalculating() {
         mockBattery.stubbedBatteryState = TestData.batteryOnBattery()
         // No aggregator data, no instant metrics

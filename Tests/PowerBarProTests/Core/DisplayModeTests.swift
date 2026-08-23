@@ -24,6 +24,12 @@ final class DisplayModeTests: XCTestCase {
         XCTAssertEqual(DisplayMode.average(seconds: 0).displayName, "All Time")
     }
 
+    func testDisplayName_nonStandardMinutes() {
+        // 90 seconds = 1m30s (not truncated to "1min")
+        XCTAssertEqual(DisplayMode.average(seconds: 90).displayName, "1m30s")
+        XCTAssertEqual(DisplayMode.average(seconds: 150).displayName, "2m30s")
+    }
+
     // MARK: - Equatable
 
     func testEquatable_instant() {

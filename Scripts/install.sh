@@ -12,7 +12,7 @@ APP_NAME="PowerBarPro"
 BINARY_NAME="PowerBarPro"
 BUILD_PATH=".build/release/$BINARY_NAME"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
-ICON_SOURCE="/Users/serbinov/Desktop/projects/personal/powerBar/PowerBar.icns"
+ICON_SOURCE="Resources/PowerBarPro.icns"
 PLIST_SOURCE="Resources/Info.plist"
 
 echo "Installing $APP_NAME..."
@@ -53,7 +53,7 @@ fi
 echo "Copying app icon..."
 if [ -f "$ICON_SOURCE" ]; then
     cp "$ICON_SOURCE" "$INSTALL_PATH/Contents/Resources/PowerBar.icns"
-    echo "Icon copied from original powerBar project."
+    echo "Icon copied."
 else
     echo "Warning: Icon not found at $ICON_SOURCE"
     echo "  The app will work but without a custom icon."

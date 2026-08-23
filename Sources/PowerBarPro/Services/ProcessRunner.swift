@@ -49,9 +49,10 @@ final class ProcessRunner: ProcessRunning {
 
         do {
             try process.run()
+            // Read before wait to prevent pipe buffer deadlock
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             if process.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let path = String(data: data, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 return (path?.isEmpty == false) ? path : nil
@@ -70,6 +71,11 @@ final class ProcessRunner: ProcessRunning {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+
+        // Prevent subprocess from showing dock icon or activating GUI
+        var env = ProcessInfo.processInfo.environment
+        env["LSBackgroundOnly"] = "1"
+        process.environment = env
 
         let pipe = Pipe()
         process.standardOutput = pipe

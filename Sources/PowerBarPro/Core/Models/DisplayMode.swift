@@ -18,7 +18,13 @@ enum DisplayMode: Equatable, Codable, Sendable {
             if seconds == 0 {
                 return "All Time"
             } else if seconds >= 60 {
-                return "\(seconds / 60)min"
+                let mins = seconds / 60
+                let remainder = seconds % 60
+                if remainder == 0 {
+                    return "\(mins)min"
+                } else {
+                    return "\(mins)m\(remainder)s"
+                }
             } else {
                 return "\(seconds)s"
             }

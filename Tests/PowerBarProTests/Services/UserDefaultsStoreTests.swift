@@ -7,21 +7,22 @@ final class UserDefaultsStoreTests: XCTestCase {
     var defaults: UserDefaults!
     var store: UserDefaultsStore!
     var cancellables: Set<AnyCancellable>!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
-        // Use a unique suite name to avoid polluting real UserDefaults
-        defaults = UserDefaults(suiteName: "com.powerbar.tests.\(UUID().uuidString)")!
+        suiteName = "com.powerbar.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)!
         store = UserDefaultsStore(defaults: defaults)
         cancellables = Set<AnyCancellable>()
     }
 
     override func tearDown() {
-        let suiteName = defaults.volatileDomainNames.first
         cancellables = nil
         store = nil
-        defaults.removePersistentDomain(forName: "com.powerbar.tests")
+        defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
+        suiteName = nil
         super.tearDown()
     }
 

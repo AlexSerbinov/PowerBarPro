@@ -2,11 +2,6 @@ import Foundation
 
 /// Composition root — creates and wires all dependencies.
 /// Every service is created once and shared through protocol references.
-///
-/// Extension points for future features:
-/// - Add `ProcessListService` for active process monitoring
-/// - Add `ScreenPowerService` for display wattage tracking
-/// - Add `PerCoreMetricsService` for per-core energy breakdown
 final class DependencyContainer {
 
     // MARK: - Services
@@ -15,12 +10,19 @@ final class DependencyContainer {
     let processRunner: ProcessRunning
     let powerMonitor: PowerMonitoring
     let batteryMonitor: BatteryMonitoring
-    let powerAggregator: PowerAggregator
+    let powerAggregator: PowerAggregating
+    let processEnergyService: ProcessMonitoring
+    let processTerminator: ProcessTerminating
+    let attributionEngine: PowerAttributing
+    let calibrationService: CalibrationService
+    let coalitionGrouper: CoalitionGrouping
+    let processDescriptionService: ProcessDescriptionService
 
     // MARK: - ViewModels
 
     let powerDisplayVM: PowerDisplayViewModel
     let batteryVM: BatteryViewModel
+    let processListVM: ProcessListViewModel
 
     // MARK: - Presentation
 
@@ -34,8 +36,8 @@ final class DependencyContainer {
         processRunner = ProcessRunner()
 
         // Layer 2: Data services
-        let macMonService = MacMonService(processRunner: processRunner)
-        powerMonitor = macMonService
+        let macPowService = MacPowService(processRunner: processRunner)
+        powerMonitor = macPowService
 
         let batteryService = SystemBatteryService(processRunner: processRunner)
         batteryMonitor = batteryService
@@ -44,9 +46,28 @@ final class DependencyContainer {
             maxHistoryDuration: Constants.Defaults.maxHistoryDuration
         )
 
+        processEnergyService = ProcessEnergyService()
+        processTerminator = ProcessTerminator()
+        coalitionGrouper = CoalitionGrouper()
+
+        // Layer 2.5: Attribution & Calibration
+        let engine = PowerAttributionEngine()
+        attributionEngine = engine
+
+        let calibration = CalibrationService(processTerminator: processTerminator)
+        calibrationService = calibration
+
+        // Wire calibration coefficients → attribution engine
+        for (name, result) in calibration.store.appCoefficients where result.isReliable {
+            engine.appCoefficients[name] = result.coefficient
+        }
+        engine.globalCoefficient = calibration.store.globalCoefficient
+
+        processDescriptionService = ProcessDescriptionService()
+
         // Layer 3: ViewModels
         powerDisplayVM = PowerDisplayViewModel(
-            powerMonitor: macMonService,
+            powerMonitor: macPowService,
             aggregator: powerAggregator,
             settings: settings
         )
@@ -57,11 +78,20 @@ final class DependencyContainer {
             settings: settings
         )
 
+        processListVM = ProcessListViewModel(
+            processMonitor: processEnergyService,
+            terminator: processTerminator,
+            attributionEngine: engine,
+            coalitionGrouper: coalitionGrouper
+        )
+
         // Layer 4: Presentation
         menuBarManager = MenuBarManager(
             powerDisplayVM: powerDisplayVM,
             batteryVM: batteryVM,
-            settings: settings
+            processListVM: processListVM,
+            settings: settings,
+            processDescriptionService: processDescriptionService
         )
     }
 }
