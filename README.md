@@ -1,85 +1,111 @@
 # PowerBarPro
 
-macOS menu bar app that shows **real-time power consumption** — and, unlike most monitors, tells you **which apps are actually burning your watts**.
+A macOS menu bar app that answers one question at a glance: **where is your
+MacBook's energy going right now** — and lets you do something about it.
 
-Successor to [powerBar](https://github.com/AlexSerbinov/powerBar) with a full rewrite: clean architecture, per-process power attribution, calibration tooling, and a SwiftUI popover.
+<p align="center">
+  <img src="docs/popover.png" width="346" alt="PowerBarPro popover" />
+</p>
 
-## Features
+## What it does, in plain words
 
-- **Menu bar wattage** — instant or averaged (3s … 1h) system power draw
-- **Per-process power attribution** — Kepler-style: exact component power (CPU / DRAM / GPU / storage from hardware counters) is distributed across processes proportionally to their usage of each component. The sum over processes ≈ total SoC power, which is far more accurate than raw `proc_pid_rusage` readings
-- **Process list with kill action** — see the top consumers, terminate the hogs
-- **App coalition grouping** — "Google Chrome Helper (Renderer)" × 12 rolls up into "Google Chrome"
-- **Battery panel** — charge, health, time remaining, charging wattage
-- **SwiftUI popover** — hero wattage, metric grid, sparkline history (up to 6h), process list
-- **Calibration** — Python tooling (`Scripts/calibrate.py`) measures the real power impact of an app by kill-and-diff against baseline, producing per-app correction coefficients
-- **Optional LLM tooltips** — one-line descriptions of unknown processes ("what is `mds_stores`, is it safe to close?") via OpenRouter. Fully optional; without an API key the app works normally, descriptions are just absent
+**In the menu bar** you always see the current total power draw (e.g. `17.2W`)
+with a thin bar underneath showing how hard the fans are spinning. The bar's
+color tells you which fan mode is active: gray for automatic, green/blue/orange
+for fixed speeds, rose for the battery-temperature curve.
+
+**Click it** and a compact panel opens:
+
+- **Total power** — big number up top, averaged over a window you choose
+  (instant, 3s … 1h), so it doesn't jitter.
+- **Battery** — charge %, and how long the battery would last at the current
+  draw. The estimate stays visible even when plugged in (a ⚡ bolt marks AC
+  power), and it recalculates within a second of pulling the cable.
+- **Component strip** — CPU, GPU, package, RAM and display watts side by side.
+  Hover any cell for extra detail (fabric power, GPU cores, brightness…).
+- **Power History** — a live chart of total draw for the last 1m / 5m / 15m /
+  1h / 6h. Hover it to read the exact watts at any moment. History survives
+  app restarts, so the 6-hour view is really six hours.
+- **Fan Control** — one-tap chips: `Auto · Curve · 0 · 30 · 70 · 100`.
+  Fixed speeds pin the fans to a percentage of their range; Curve follows the
+  battery temperature along an editable ramp (e.g. 36°C→60% … 39°C→100%).
+  Switching modes flashes a small volume-style HUD under the menu bar — the
+  same one you get when changing modes with keyboard shortcuts.
+- **Details** — CPU and GPU load (0–100%), RAM used, swap, free disk, and the
+  hottest temperature per component including the battery pack.
+- **Active Processes** — which apps are actually burning your watts. Not just
+  CPU time: power is attributed per process from real hardware counters
+  (CPU energy, memory, GPU), so the numbers add up to what the machine truly
+  draws. Hover a row and hit ✕ to terminate a hog. The list scrolls.
+- **Agent Sessions** — for people who run Claude Code / Codex CLI: every live
+  session with its project, memory and CPU, plus the memory eaten by their
+  MCP helper processes. Reveal a session's folder in Finder or quit it (the
+  conversation stays on disk — `--resume` brings it back).
+- **Session energy** — the footer shows how many watt-hours the system
+  consumed since the app started, with the average draw.
+- **Alerts** — optional notification when a single app draws more than a
+  threshold (10–60W) for five minutes straight.
+- **Settings** — behind the gear: averaging windows, refresh rate, alerts,
+  launch at login. Every row has an ⓘ with a plain-language explanation.
+
+Right-clicking the menu bar item gives a classic NSMenu with the same
+controls, process list and a language switch (English / Ukrainian).
+
+## What it costs to run
+
+Almost nothing: ~0.1% CPU and ~45 MB of memory at idle. Expensive work
+(process scanning, battery probing, UI rendering) runs only while something
+is actually visible, and slows to a crawl in the background.
 
 ## Requirements
 
 - macOS 13.0+, Apple Silicon
-- **[macpow](https://github.com/k06a/macpow)** — power metrics provider (reads IOReport/SMC):
+- **[macpow](https://github.com/k06a/macpow)** — power metrics provider:
   ```bash
   brew install k06a/tap/macpow
   ```
-  If `macpow` is missing, the app falls back to [macmon](https://github.com/vladkens/macmon) (`brew install macmon`) with a reduced metric set (no display/SSD/WiFi breakdown).
-
-> Why an external binary? Component-level power on Apple Silicon comes from private frameworks (IOReport, SMC). `macpow`/`macmon` wrap them well; bundling a native reader is on the roadmap but not worth blocking on.
+  Without it the app falls back to [macmon](https://github.com/vladkens/macmon)
+  (`brew install macmon`) with a reduced metric set.
+- **Fan control is optional** and appears only when the
+  [MacFans](https://github.com/AlexSerbinov) daemon (`macfansd`) is installed —
+  writing SMC fan keys needs a root helper, and PowerBarPro talks to it over
+  its local socket instead of asking for privileges itself. Everything else
+  works without it.
 
 ## Install
 
 ```bash
 git clone https://github.com/AlexSerbinov/PowerBarPro.git
 cd PowerBarPro
-make install   # builds release, creates /Applications/PowerBarPro.app, codesigns ad-hoc
+make install   # builds release, creates /Applications/PowerBarPro.app
 open /Applications/PowerBarPro.app
 ```
 
-Other targets: `make build`, `make test`, `make run`, `make restart`, `make clean`, `make check`.
+Other targets: `make build`, `make test`, `make run`, `make restart`, `make clean`.
 
-## Usage
+## Calibration (optional)
 
-- **Left-click** the menu bar item — popover with metrics, history, process list
-- **Right-click** — quick menu: averaging mode, update interval, process averaging, language, quit
-- Settings persist via UserDefaults
-
-### Optional: LLM process descriptions
-
-Provide an [OpenRouter](https://openrouter.ai) API key in any of these (first match wins):
-
-1. `OPENROUTER_API_KEY` environment variable
-2. `defaults write com.alexserbinov.powerbar-pro openRouterAPIKey sk-or-...` (UserDefaults)
-3. `~/Library/Application Support/PowerBarPro/config.json`:
-   ```json
-   { "openRouterAPIKey": "sk-or-...", "model": "openai/gpt-4.1-mini" }
-   ```
-
-Responses are cached on disk per (process, language), so the API is hit once per unknown process.
-
-### Calibration
-
-`proc_pid_rusage` undercounts real app impact (it misses DRAM, GPU, fabric, storage). To correct it:
+Raw per-process energy counters undercount real impact (they miss DRAM, GPU
+and fabric). The bundled Python tooling measures an app's true cost by
+kill-and-diff against a quiet baseline and stores per-app correction factors:
 
 ```bash
-python3 Scripts/calibrate.py "Telegram"   # kill-and-diff measurement for one app
-python3 Scripts/calibrate_overnight.py    # batch calibration
+python3 Scripts/calibrate.py "Telegram"
+python3 Scripts/calibrate_overnight.py    # batch mode
 ```
-
-Coefficients are stored in `~/Library/Application Support/PowerBarPro/calibration.json` and applied by the attribution engine on launch.
 
 ## Architecture
 
-Clean Architecture + MVVM + Combine + protocol-oriented DI. Every service depends on protocols; `DependencyContainer` is the only composition root.
+Clean Architecture + MVVM + Combine, protocol-oriented DI throughout;
+`DependencyContainer` is the only composition root. 331 unit tests: `swift test`.
 
 ```
 App           main.swift, AppDelegate, DependencyContainer
-Presentation  MenuBarManager, MenuBuilder, PopoverManager, ViewModels
+Presentation  MenuBarManager, MenuBuilder, PopoverManager, FanHUD, ViewModels
 Services      MacPowService, ProcessEnergyService, PowerAttributionEngine,
-              CoalitionGrouper, CalibrationService, BatteryService, ...
+              AgentSessionsService, MacFansClient, CalibrationService, ...
 Core          Protocols + Models (SystemMetrics, AttributedPower, ...)
 ```
-
-287 unit tests: `swift test`.
 
 ## License
 

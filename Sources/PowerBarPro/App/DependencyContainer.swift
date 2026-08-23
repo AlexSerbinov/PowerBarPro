@@ -16,7 +16,6 @@ final class DependencyContainer {
     let attributionEngine: PowerAttributing
     let calibrationService: CalibrationService
     let coalitionGrouper: CoalitionGrouping
-    let processDescriptionService: ProcessDescriptionService
     let historyPersistence: HistoryPersistenceService
     let alertService: PowerAlertService
 
@@ -65,7 +64,6 @@ final class DependencyContainer {
         }
         engine.globalCoefficient = calibration.store.globalCoefficient
 
-        processDescriptionService = ProcessDescriptionService()
         historyPersistence = HistoryPersistenceService(aggregator: powerAggregator)
         historyPersistence.start()
         alertService = PowerAlertService(
@@ -101,8 +99,7 @@ final class DependencyContainer {
             powerDisplayVM: powerDisplayVM,
             batteryVM: batteryVM,
             processListVM: processListVM,
-            settings: settings,
-            processDescriptionService: processDescriptionService
+            settings: settings
         )
     }
 }

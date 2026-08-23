@@ -15,8 +15,6 @@ final class MenuBarManager: NSObject {
     private let settings: SettingsStorage
     private var cancellables = Set<AnyCancellable>()
 
-    private let processDescriptionService: ProcessDescriptionService?
-
     // MARK: - Background-cost controls
 
     /// Battery state comes from an `ioreg` subprocess — spawning one every
@@ -37,26 +35,52 @@ final class MenuBarManager: NSObject {
         powerDisplayVM: PowerDisplayViewModel,
         batteryVM: BatteryViewModel,
         processListVM: ProcessListViewModel,
-        settings: SettingsStorage,
-        processDescriptionService: ProcessDescriptionService? = nil
+        settings: SettingsStorage
     ) {
         self.powerDisplayVM = powerDisplayVM
         self.batteryVM = batteryVM
         self.processListVM = processListVM
         self.settings = settings
-        self.processDescriptionService = processDescriptionService
     }
 
     // MARK: - Lifecycle
 
     func setup() {
-        // Wire LLM service + language into menu builder
-        menuBuilder.processDescriptionService = processDescriptionService
         menuBuilder.currentLanguage = settings.language.rawValue
 
         createStatusItem()
         wireMenuActions()
         bindViewModels()
+        listenForRemoteOpen()
+    }
+
+    /// Dev/automation hook: `notifyutil`-style distributed notification opens
+    /// the popover and writes its window frame (top-left origin, points) to
+    /// /tmp/powerbarpro_popover_frame.txt — used for docs screenshots.
+    private func listenForRemoteOpen() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.powerbarpro.showPopover"),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            guard let button = self.statusItem?.button else {
+                try? "no-button".write(toFile: "/tmp/powerbarpro_popover_frame.txt", atomically: true, encoding: .utf8)
+                return
+            }
+            if !(self.popoverManager?.isShown ?? false) {
+                self.popoverManager?.toggle(relativeTo: button)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                guard let frame = self.popoverManager?.currentWindowFrame() else {
+                    try? "no-window".write(toFile: "/tmp/powerbarpro_popover_frame.txt", atomically: true, encoding: .utf8)
+                    return
+                }
+                let screenH = NSScreen.screens.first?.frame.height ?? 0
+                let top = screenH - (frame.origin.y + frame.height)
+                let line = "\(Int(frame.origin.x)) \(Int(top)) \(Int(frame.width)) \(Int(frame.height))"
+                try? line.write(toFile: "/tmp/powerbarpro_popover_frame.txt", atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     func tearDown() {

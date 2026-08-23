@@ -68,6 +68,11 @@ final class PopoverManager: NSObject, NSPopoverDelegate {
         // popoverDidClose handles the teardown (also fires on outside-click)
     }
 
+    /// Frame of the popover's on-screen window (screen coords), if shown.
+    func currentWindowFrame() -> NSRect? {
+        popover?.contentViewController?.view.window?.frame
+    }
+
     // MARK: - NSPopoverDelegate
 
     func popoverDidClose(_ notification: Notification) {

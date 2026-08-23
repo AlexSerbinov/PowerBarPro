@@ -904,20 +904,13 @@ struct ProcessListSectionView: View {
 struct ProcessRowView: View {
     let process: AttributedPower
     var onKill: (() -> Void)?
-    var descriptionService: ProcessDescriptionService?
-    var language: String = "en"
 
     @State private var isHovered = false
-    @State private var tooltip: String = ""
 
     /// Known system daemon suffixes and names
     private var isSystemProcess: Bool {
         let name = process.name.lowercased()
-        // Check LLM cache first
-        if let desc = descriptionService?.getCached(processName: process.name, language: language) {
-            return desc.isSystem
-        }
-        // Heuristic fallback: daemons end with 'd', known system names
+        // Heuristic: daemons end with 'd', known system names
         let systemNames: Set = ["kernel_task", "windowserver", "loginwindow", "dock",
             "finder", "spotlight", "corespotlightd", "mds", "mds_stores",
             "trustd", "securityd", "opendirectoryd", "cfprefsd", "distnoted",
@@ -979,14 +972,9 @@ struct ProcessRowView: View {
         .padding(.vertical, 3)
         .padding(.horizontal, Spacing.md)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
-        .help(tooltip.isEmpty ? process.name : tooltip)
+        .help(process.name)
         .reliableHover { hovering in
             if isHovered != hovering { isHovered = hovering }
-        }
-        .onAppear {
-            descriptionService?.getDescription(processName: process.name, language: language) { desc in
-                tooltip = desc.tooltip(processName: process.name)
-            }
         }
     }
 

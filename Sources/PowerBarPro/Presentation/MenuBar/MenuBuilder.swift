@@ -25,8 +25,6 @@ final class MenuBuilder: NSObject {
     // Process data for terminate actions
     private var processMap: [Int: ProcessPowerInfo] = [:]  // tag → info
 
-    /// Injected by MenuBarManager for LLM tooltips
-    var processDescriptionService: ProcessDescriptionService?
     var currentLanguage: String = "en"
 
     // MARK: - Build
@@ -155,27 +153,13 @@ final class MenuBuilder: NSObject {
             return
         }
 
-        // Show top 15 processes — clickable (terminate on click), with app icon + LLM tooltip
+        // Show top 15 processes — clickable (terminate on click), with app icon
         let visible = Array(processes.prefix(15))
-
-        // Pre-fetch LLM descriptions for all visible process names
-        if let descService = processDescriptionService {
-            descService.prefetch(
-                processNames: visible.map(\.name),
-                language: currentLanguage
-            )
-        }
 
         for (i, proc) in visible.enumerated() {
             let powerStr = Formatters.processWatts(proc.powerWatts)
             let pctStr = String(format: "%.1f%%", proc.percentOfSystem)
             let title = "\(proc.name)  \(powerStr) (\(pctStr))"
-
-            // Check if we have LLM description cached
-            let cachedDesc = processDescriptionService?.getCached(
-                processName: proc.name,
-                language: currentLanguage
-            )
 
             let item = NSMenuItem(
                 title: title,
@@ -185,29 +169,7 @@ final class MenuBuilder: NSObject {
             item.target = self
             item.tag = i
 
-            // Set tooltip: LLM description if cached, otherwise basic
-            if let desc = cachedDesc {
-                item.toolTip = desc.tooltip(processName: proc.name)
-            } else {
-                item.toolTip = "\(L.terminate) \(proc.name)"
-
-                // Async fetch — update tooltip when ready
-                let name = proc.name
-                processDescriptionService?.getDescription(processName: name, language: currentLanguage) { [weak item] desc in
-                    item?.toolTip = desc.tooltip(processName: name)
-                }
-            }
-
-            // System processes: light red text
-            if cachedDesc?.isSystem == true {
-                item.attributedTitle = NSAttributedString(
-                    string: title,
-                    attributes: [
-                        .foregroundColor: NSColor.systemRed.withAlphaComponent(0.7),
-                        .font: NSFont.menuFont(ofSize: 0)
-                    ]
-                )
-            }
+            item.toolTip = "\(L.terminate) \(proc.name)"
 
             // App icon (appIcon returns it pre-sized 16x16)
             if let icon = Self.appIcon(for: proc.pids.first ?? 0) {
