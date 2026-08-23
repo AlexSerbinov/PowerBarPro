@@ -647,11 +647,15 @@ struct DetailsSectionView: View {
     let metrics: SystemMetrics?
     @State private var isExpanded = false
 
+    /// Sensor categories that add noise, not signal — hidden per feedback.
+    private static let hiddenTempCategories: Set<String> = ["Memory", "ANE", "Trackpad"]
+
     /// Hottest sensor per category (plus the battery pack), hottest first.
     private var groupedTemps: [(category: String, maxC: Double)] {
         var byCategory: [String: Double] = [:]
         for t in metrics?.temperatures ?? [] {
             let cat = t.category ?? "Other"
+            guard !Self.hiddenTempCategories.contains(cat) else { continue }
             byCategory[cat] = max(byCategory[cat] ?? 0, t.valueCelsius)
         }
         if let batteryC = metrics?.battery?.temperatureC {
@@ -896,7 +900,9 @@ struct ProcessListSectionView: View {
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(processVM.attributedProcesses.prefix(12)) { proc in
-                        ProcessRowView(process: proc)
+                        ProcessRowView(process: proc, onKill: {
+                            _ = processVM.terminateProcess(proc)
+                        })
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -907,6 +913,7 @@ struct ProcessListSectionView: View {
 
 struct ProcessRowView: View {
     let process: AttributedPower
+    var onKill: (() -> Void)?
     var descriptionService: ProcessDescriptionService?
     var language: String = "en"
 
@@ -964,13 +971,28 @@ struct ProcessRowView: View {
             Text(String(format: "%.0f%%", process.percentOfSystem))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(Color.PB.textMuted)
-                .frame(width: 36, alignment: .trailing)
+                .frame(width: 30, alignment: .trailing)
+
+            // Kill at the far right — same pattern as agent sessions:
+            // always in layout, fades in on hover (no row shift)
+            Button(action: { onKill?() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.PB.error.opacity(0.85))
+                    .padding(2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isHovered && onKill != nil ? 1 : 0)
+            .help("\(L.terminate) \(process.name)")
         }
         .padding(.vertical, 3)
         .padding(.horizontal, Spacing.md)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(isHovered ? Color.PB.surfaceHover : Color.clear))
         .help(tooltip.isEmpty ? process.name : tooltip)
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            if isHovered != hovering { isHovered = hovering }
+        }
         .onAppear {
             descriptionService?.getDescription(processName: process.name, language: language) { desc in
                 tooltip = desc.tooltip(processName: process.name)

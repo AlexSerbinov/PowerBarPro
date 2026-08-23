@@ -25,6 +25,11 @@ final class MenuBarManager: NSObject {
     private var lastBatteryRefresh: Date = .distantPast
     private let batteryRefreshInterval: TimeInterval = 30
 
+    /// Power source from the previous metrics tick — unplugging/plugging
+    /// the charger must recalculate the battery estimate immediately, not
+    /// after the 30s throttle.
+    private var lastExternalConnected: Bool?
+
     /// True while the right-click menu is open (NSMenuDelegate).
     private var isMenuOpen = false
 
@@ -285,13 +290,23 @@ final class MenuBarManager: NSObject {
             }
             .store(in: &cancellables)
 
-        // Refresh battery (throttled) + process list on metrics updates
+        // Refresh battery (throttled) + process list on metrics updates.
+        // A power-source change (charger plugged/unplugged) bypasses the
+        // throttle so the time-remaining estimate updates within a tick.
         powerDisplayVM.$currentMetrics
             .receive(on: DispatchQueue.main)
             .sink { [weak self] metrics in
                 guard let self = self else { return }
                 let now = Date()
-                if now.timeIntervalSince(self.lastBatteryRefresh) >= self.batteryRefreshInterval {
+
+                let externalNow = metrics?.battery?.externalConnected
+                let powerSourceChanged = externalNow != nil
+                    && self.lastExternalConnected != nil
+                    && externalNow != self.lastExternalConnected
+                if externalNow != nil { self.lastExternalConnected = externalNow }
+
+                if powerSourceChanged
+                    || now.timeIntervalSince(self.lastBatteryRefresh) >= self.batteryRefreshInterval {
                     self.lastBatteryRefresh = now
                     self.batteryVM.refresh(currentMetrics: metrics)
                 }
